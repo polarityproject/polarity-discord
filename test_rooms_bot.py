@@ -275,6 +275,17 @@ class Loop(unittest.TestCase):
         self.bot.step()
         self.assertEqual(self.world["log"], [("POST", "101"), ("PATCH", "101")])
 
+    def test_default_refresh_edits_every_look(self):
+        self.assertEqual(bot.load_settings()["refresh"], 20.0)
+        self.make(refresh=20.0)
+        self.bot.step()
+        self.bot.last_edit -= 19.0  # a look later, the calls a little faster this time
+        self.bot.step()
+        self.assertEqual(self.world["log"], [("POST", "101"), ("PATCH", "101")])
+        self.bot.last_edit -= 5.0  # a quick extra look (force is the only other edit)
+        self.bot.step()
+        self.assertEqual(len(self.world["log"]), 2)
+
     def test_restart_keeps_message_and_deleted_is_reposted(self):
         self.bot.step()
         self.make()  # a restart: reads state.json

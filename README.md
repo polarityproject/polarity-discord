@@ -26,8 +26,11 @@ unread.
 
 - It reads `/v1/rooms` and `/v1/summary` every 20 s (never under 10 s, the
   API's cache). It needs only outbound HTTPS and listens on nothing.
-- It edits its one message when what it shows changes, and at least every
-  5 minutes so the "last checked" time shows it is alive. It posts a new
+- It edits its one message at every look, changed or not, so the "last
+  checked" time shows it is polling (one edit every 20 s, far under
+  Discord's webhook limits; `REFRESH_EVERY` spaces the unchanged edits out).
+  While the API fails it keeps the last list unedited, so "last checked"
+  stops for up to 2 minutes before the message says so. It posts a new
   message only the first time and when someone deletes it. The message's id
   is kept in the `state` volume, so a restart or a rebuild edits the same
   message.
@@ -114,7 +117,7 @@ here do.
 | --- | --- | --- |
 | `ROOMS_API_URL` | the public Worker | the rooms API's address, without a path |
 | `POLL_EVERY` | 20 | seconds between reads (at least 10) |
-| `REFRESH_EVERY` | 300 | the longest without an edit (the "last checked" time) |
+| `REFRESH_EVERY` | 20 | the longest without an edit while nothing changes (the "last checked" time; at least 10; at or under `POLL_EVERY`: every look) |
 | `FAIL_AFTER` | 120 | seconds of API failures before the message says it cannot be reached |
 | `HEADING` | SFVR public rooms | the message's heading |
 | `MAX_ROOMS` | 9 | the most room cards (at most 9) |
@@ -134,9 +137,9 @@ here do.
 How long a change normally takes to reach the message: the keeper writes the
 list every 5 s, the publisher pushes a changed list within 10 s, the Worker's
 cache holds it up to 10 s, and the bot looks every 20 s. So a room should
-show up within about 45 s. When nothing changes, the message is edited only
-every 5 minutes (`REFRESH_EVERY`), so its "last checked" time can read
-"5 minutes ago" without anything being wrong.
+show up within about 45 s. The "last checked" time moves at every look, so
+one older than about 40 s means the bot is not getting through (the trace
+below says why).
 
 Always logged: any call taking 5 s or more (`slow call: PATCH message took
 7.2 s (200)`), any look taking 10 s or more (with its calls), and the rooms
@@ -148,7 +151,7 @@ and read `sudo docker compose logs -f -t bot`:
 
 ```
 look: live, 2 rooms, edited in 0.74 s; list 12 s old (age 12); GET rooms 0.53 s, GET summary 0.21 s, PATCH message 0.30 s
-look (14 s late): live, 2 rooms, no change in 0.47 s; list 33 s old (age 31); GET rooms 0.21 s, GET summary 0.25 s
+look (14 s late): live, 2 rooms, edited (refresh) in 0.77 s; list 33 s old (age 31); GET rooms 0.21 s, GET summary 0.25 s, PATCH message 0.31 s
 ```
 
 | What you see | Where the time went |
@@ -168,7 +171,7 @@ log line written late.
 | --- | --- |
 | Another channel | a webhook there, its URL in `secrets/discord_webhook`, `sudo docker compose up -d --force-recreate`: it posts a new message there (the old one stays; delete it by hand) |
 | A new webhook URL, same channel | the same; the new webhook cannot edit the old one's message, so it posts a new one |
-| A message deleted | nothing: it posts a new one at its next edit (within 5 minutes) |
+| A message deleted | nothing: it posts a new one at its next look |
 | A new version | pack and copy as above, untar over `/opt/sfvr-discord`, `sudo docker compose up -d --build` |
 | Image security fixes | `sudo docker compose build --pull && sudo docker compose up -d` |
 | Stop it | `sudo docker compose stop` (the message says it is stopped); `sudo docker compose down` removes the container, `down -v` the saved message id too |

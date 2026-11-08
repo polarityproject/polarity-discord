@@ -7,6 +7,9 @@ first; the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+- The message is edited at every look (`REFRESH_EVERY` 20, was 300), so its
+  "last checked" time shows the bot is polling. A `discord.env` that still
+  says `REFRESH_EVERY=300` keeps the old pace.
 - `TRACE=1` logs every look: each call's time, how old the rooms list is,
   and what was done to the message. Slow calls (5 s), slow looks (10 s) and
   a rooms list not moving for 55 s are logged anyway.

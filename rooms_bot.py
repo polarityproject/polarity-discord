@@ -6,8 +6,8 @@
 #
 # Every POLL_EVERY seconds (20; never under 10, the API's cache): GET
 # <ROOMS_API_URL>/v1/rooms and /v1/summary, render the message, and edit it
-# when what it shows changed, or at least every REFRESH_EVERY seconds (300)
-# so its "checked" time shows the bot is alive.
+# when what it shows changed, or at least every REFRESH_EVERY seconds (20:
+# every look) so its "checked" time shows the bot is polling.
 #
 # It posts through a channel webhook (https://discord.com/api/webhooks/<id>/
 # <token>, from the channel's Integrations settings, in the secret file):
@@ -707,7 +707,9 @@ class Bot:
         now = time.time()
         payload = render(self.rooms_doc, self.summary_doc, shown, self.settings, now)
         key = strip_checked(payload)
-        due = now - self.last_edit >= self.settings["refresh"]
+        # Half a look's slack, so a refresh as long as the look edits at every
+        # look however long the calls took.
+        due = now - self.last_edit >= self.settings["refresh"] - self.settings["poll"] / 2
         rooms = len(listed_rooms(self.rooms_doc, self.settings))
         what = f"{shown}, {plural(rooms, 'room')}"
         if key == self.last_key and not due and not force:
@@ -755,7 +757,7 @@ def load_settings():
     versions = [v.strip().lower() for v in (os.environ.get("ROOM_VERSIONS", "") or "latest").split(",") if v.strip()]
     return {
         "poll": env_float("POLL_EVERY", 20, 10),
-        "refresh": env_float("REFRESH_EVERY", 300, 30),
+        "refresh": env_float("REFRESH_EVERY", 20, 10),
         "fail_after": env_float("FAIL_AFTER", 120, 0),
         "max_rooms": int(env_float("MAX_ROOMS", 9, 0)),
         "heading": os.environ.get("HEADING", "") or "SFVR public rooms",
