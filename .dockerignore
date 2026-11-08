@@ -1,0 +1,3 @@
+# Only rooms_bot.py goes into the image; keep the secret out of the build context.
+*
+!rooms_bot.py

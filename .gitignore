@@ -1,0 +1,4 @@
+# Settings and the webhook URL stay on the machine that runs the bot.
+*.env
+secrets/
+__pycache__/

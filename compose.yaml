@@ -1,0 +1,41 @@
+# sfvr-discord: one message in a Discord channel kept showing SFVR's public
+# rooms, read from the rooms API (README.md). Outbound HTTPS only; it listens
+# on nothing. Run from this folder:
+#   docker compose up -d --build
+name: sfvr-discord
+
+services:
+  bot:
+    build: {context: .}
+    image: sfvr-discord/bot:latest
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    # Polling, the heading, the room filter, the new room notice
+    # (discord.env.example).
+    env_file: [discord.env]
+    environment:
+      DISCORD_SECRET_FILE: /run/secrets/discord_webhook
+      STATE_DIR: /data
+    secrets: [discord_webhook]
+    volumes: ["state:/data"]
+    mem_limit: 64m
+    # Healthy while it reads the list and updates Discord.
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,sys,time; sys.exit(time.time() - os.path.getmtime('/data/healthy') > 180)"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 60s
+
+secrets:
+  # The channel's webhook URL, one line (README.md, "Set it up").
+  discord_webhook: {file: ./secrets/discord_webhook}
+
+volumes:
+  state: {}
