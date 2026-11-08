@@ -78,6 +78,23 @@ def log(text):
     print(time.strftime("%Y-%m-%d %H:%M:%S ") + text, flush=True)
 
 
+# Diagnostics: every HTTP call is timed. A call this slow is always logged, as
+# is a look this slow (with its calls), and a rooms list this old.
+SLOW_CALL = 5.0
+SLOW_LOOK = 10.0
+BEHIND = 55.0  # the publisher heartbeats every 30 s, so up to ~50 s is normal for an unchanged list
+CALLS = []  # (label, seconds, outcome) since the current look began
+
+
+def call_label(method, url):
+    """A call's name for the log (never the webhook token)."""
+    path = urllib.parse.urlsplit(url).path
+    m = re.search(r"/webhooks/\d+/[^/]+(/.*)?$", path)
+    if m:
+        return method + (" message" if (m.group(1) or "").startswith("/messages/") else " webhook")
+    return method + " " + path.rsplit("/", 1)[-1]
+
+
 def env_float(name, default, low):
     try:
         value = float(os.environ.get(name, "") or default)
@@ -347,11 +364,14 @@ def request(method, url, headers=None, body=None, timeout=15):
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         hdrs["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+    start, outcome = time.monotonic(), "error"
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             raw = r.read(4 * 1024 * 1024)
+            outcome = str(r.status)
             return r.status, (json.loads(raw) if raw else None)
     except urllib.error.HTTPError as e:
+        outcome = str(e.code)
         raw = e.read(64 * 1024).decode("utf-8", "replace")
         e.close()
         retry = None
@@ -361,6 +381,15 @@ def request(method, url, headers=None, body=None, timeout=15):
             except (ValueError, TypeError, AttributeError):
                 retry = float(e.headers.get("Retry-After") or 5)
         raise HttpError(e.code, raw, retry) from None
+    except OSError as e:
+        outcome = type(e).__name__
+        raise
+    finally:
+        took = time.monotonic() - start
+        label = call_label(method, url)
+        CALLS.append((label, took, outcome))
+        if took >= SLOW_CALL:
+            log(f"rooms-bot: slow call: {label} took {took:.1f} s ({outcome})")
 
 
 class RoomsApi:
@@ -523,6 +552,28 @@ class Bot:
         self.failing_since = None
         self.said_failing = False
         self.discord_failing = False
+        self.behind_since = None
+
+    def list_age(self):
+        """Seconds since the rooms server's keeper wrote the list we have."""
+        if not self.rooms_doc or not self.rooms_doc.get("updated"):
+            return None
+        return time.time() - self.rooms_doc["updated"] / 1000
+
+    def watch_age(self):
+        """Log when the list falls behind (the keeper or publisher not
+        pushing) and when it catches up."""
+        lag = self.list_age()
+        if lag is None:
+            return
+        if lag > BEHIND and self.behind_since is None:
+            self.behind_since = time.time() - lag
+            log(f"rooms-bot: the rooms list is {lag:.0f} s old (age {self.rooms_doc.get('age')}): "
+                "the rooms server's keeper or publisher is behind")
+        elif lag <= BEHIND and self.behind_since is not None:
+            log(f"rooms-bot: the rooms list is fresh again ({lag:.0f} s old; "
+                f"it had not moved for {time.time() - lag - self.behind_since:.0f} s)")
+            self.behind_since = None
 
     def fetch(self):
         """Fetch both documents; return the state to show."""
@@ -536,6 +587,7 @@ class Bot:
             if self.failing_since is not None:
                 log(f"rooms-bot: rooms API answering again after {time.time() - self.failing_since:.0f} s")
             self.failing_since, self.said_failing = None, False
+            self.watch_age()
         except (HttpError, ValueError, OSError) as e:
             now = time.time()
             if self.failing_since is None:
@@ -558,7 +610,7 @@ class Bot:
         if self.message_id:
             try:
                 self.discord.edit(self.message_id, payload)
-                return True
+                return "edited"
             except HttpError as e:
                 # 10008 Unknown Message: deleted; post a new one.
                 if e.status == 404 and e.discord_code() == 10008:
@@ -569,7 +621,7 @@ class Bot:
         self.message_id = self.discord.post(payload)
         self.save()
         log(f"rooms-bot: posted message {self.message_id}")
-        return True
+        return "posted"
 
     def save(self):
         try:
@@ -626,7 +678,24 @@ class Bot:
         if changed:
             self.save()
 
-    def step(self, force=False):
+    def step(self, force=False, late=0.0):
+        """One look: read the API, edit the message if it changed. Traced
+        (TRACE=1), or logged anyway when it was slow."""
+        CALLS.clear()
+        start = time.monotonic()
+        outcome = self._step(force)
+        took = time.monotonic() - start
+        if not (self.settings["trace"] or took >= SLOW_LOOK):
+            return
+        line = f"rooms-bot: look{f' ({late:.0f} s late)' if late >= 1 else ''}: {outcome} in {took:.2f} s"
+        lag = self.list_age()
+        if lag is not None:
+            line += f"; list {lag:.0f} s old (age {self.rooms_doc.get('age')})"
+        calls = ", ".join(f"{label} {secs:.2f} s" + ("" if out.startswith("2") else f" ({out})")
+                          for label, secs, out in CALLS)
+        log(line + (f"; {calls}" if calls else ""))
+
+    def _step(self, force):
         if "latest" in self.settings["versions"]:
             resolve_versions(self.settings, self.latest.get(time.time()))
         else:
@@ -634,17 +703,19 @@ class Bot:
         shown = self.fetch()
         if shown is None:
             self.state.alive()
-            return
+            return "API failing, kept the last list"
         now = time.time()
         payload = render(self.rooms_doc, self.summary_doc, shown, self.settings, now)
         key = strip_checked(payload)
         due = now - self.last_edit >= self.settings["refresh"]
+        rooms = len(listed_rooms(self.rooms_doc, self.settings))
+        what = f"{shown}, {plural(rooms, 'room')}"
         if key == self.last_key and not due and not force:
             self.check_new_rooms(shown, now)
             self.state.alive()
-            return
+            return what + ", no change"
         try:
-            self.publish(payload)
+            done = self.publish(payload)
         except (HttpError, OSError) as e:
             detail = ""
             if isinstance(e, HttpError):
@@ -654,17 +725,18 @@ class Bot:
             if not self.discord_failing:
                 log(f"rooms-bot: Discord update failed ({e}{detail})")
                 self.discord_failing = True
-            return
+            return what + ", Discord failed"
         if self.discord_failing:
             log("rooms-bot: Discord updates working again")
             self.discord_failing = False
-        if key != self.last_key:
-            rooms = len(listed_rooms(self.rooms_doc, self.settings))
-            log(f"rooms-bot: message updated ({shown}, {plural(rooms, 'room')})")
+        changed = key != self.last_key
+        if changed:
+            log(f"rooms-bot: message updated ({what})")
         self.last_key, self.last_edit = key, now
         # After the edit, so whoever the notice brings in finds the room listed.
         self.check_new_rooms(shown, now)
         self.state.alive()
+        return f"{what}, {done}" + ("" if changed else " (refresh)")
 
     def stopped(self):
         self.sweep(time.time(), everything=True)
@@ -699,6 +771,7 @@ def load_settings():
         "notify_delete": env_float("NEW_ROOM_DELETE_AFTER", 5, 1),
         "notify_cooldown": env_float("NEW_ROOM_COOLDOWN", 60, 0),
         "failing_since": 0,
+        "trace": os.environ.get("TRACE", "").strip().lower() in ("1", "true", "yes"),
     }
 
 
@@ -739,7 +812,8 @@ def main():
     discord = Discord(secret)
     bot = Bot(api, discord, State(os.environ.get("STATE_DIR", "/data")), settings)
     log(f"rooms-bot: {api_url} -> Discord webhook, every {settings['poll']:g} s"
-        + (f", message {bot.message_id}" if bot.message_id else ", new message"))
+        + (f", message {bot.message_id}" if bot.message_id else ", new message")
+        + (", tracing every look" if settings["trace"] else ""))
 
     if args.once:
         bot.sweep(time.time(), everything=True)
@@ -753,8 +827,9 @@ def main():
         while True:
             now = time.time()
             if now >= next_look:
+                late = now - next_look if next_look else 0.0
                 next_look = now + settings["poll"]
-                bot.step()
+                bot.step(late=late)
             bot.sweep(time.time())
             time.sleep(0.5 if bot.notices else 1.0)
     except Stop:

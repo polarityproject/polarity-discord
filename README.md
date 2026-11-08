@@ -127,6 +127,40 @@ here do.
 | `NEW_ROOM_COOLDOWN` | 60 | the shortest gap between two notices |
 | `MESSAGE_ID` | | adopt a message the same webhook posted before |
 | `OFFLINE_NOTICE` | 1 | on stopping, say the list is not updating |
+| `TRACE` | 0 | 1: a log line for every look (see "When updates seem slow") |
+
+## When updates seem slow
+
+How long a change normally takes to reach the message: the keeper writes the
+list every 5 s, the publisher pushes a changed list within 10 s, the Worker's
+cache holds it up to 10 s, and the bot looks every 20 s. So a room should
+show up within about 45 s. When nothing changes, the message is edited only
+every 5 minutes (`REFRESH_EVERY`), so its "last checked" time can read
+"5 minutes ago" without anything being wrong.
+
+Always logged: any call taking 5 s or more (`slow call: PATCH message took
+7.2 s (200)`), any look taking 10 s or more (with its calls), and the rooms
+list going more than 55 s without moving (`the rooms list is 70 s old … the
+rooms server's keeper or publisher is behind`), then catching up again.
+
+For every look, set `TRACE=1` in `discord.env`, `sudo docker compose up -d`,
+and read `sudo docker compose logs -f -t bot`:
+
+```
+look: live, 2 rooms, edited in 0.74 s; list 12 s old (age 12); GET rooms 0.53 s, GET summary 0.21 s, PATCH message 0.30 s
+look (14 s late): live, 2 rooms, no change in 0.47 s; list 33 s old (age 31); GET rooms 0.21 s, GET summary 0.25 s
+```
+
+| What you see | Where the time went |
+| --- | --- |
+| Looks more than 20 s apart, `(N s late)`, or a slow call | the bot or its network (DNS, Discord, Cloudflare); the slow call names which |
+| `list N s old` climbing past ~50 s while rooms change in the game | upstream: the rooms server's keeper or publisher (their logs on the VPS) |
+| `list N s old` more than 10 s over `age` | a cached answer held too long, or the bot's clock is off |
+| `edited` on time but Discord shows the old message | Discord's client: Ctrl+R in Discord shows the message as it is |
+| `Discord rate limit, waiting` | Discord slowing the webhook down (another tool on the same webhook?) |
+
+The `-t` adds Docker's own timestamps; compare them with the bot's to see a
+log line written late.
 
 ## Changing it
 

@@ -7,6 +7,9 @@ first; the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+- `TRACE=1` logs every look: each call's time, how old the rooms list is,
+  and what was done to the message. Slow calls (5 s), slow looks (10 s) and
+  a rooms list not moving for 55 s are logged anyway.
 - Only the latest release's rooms are listed by default (`ROOM_VERSIONS`
   `latest`): the game lists only its own version's rooms, so others could not
   be found. The latest release is read from the SFVR site's update info every

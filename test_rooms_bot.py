@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # Tests for rooms_bot.py against a stand-in rooms API and a stand-in Discord
 # webhook on 127.0.0.1 (no network):  python test_rooms_bot.py
+import contextlib
 import http.server
+import io
 import json
 import os
 import re
@@ -313,6 +315,44 @@ class Loop(unittest.TestCase):
         self.world["rooms"] = rooms_doc([room()], updated=int((time.time() - 600) * 1000))
         self.bot.step()
         self.assertIn("has not reported", self.last()["embeds"][0]["description"])
+
+    def logged(self, fn):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fn()
+        return out.getvalue()
+
+    def test_trace_names_each_call_without_the_token(self):
+        self.make(trace=True)
+        text = self.logged(self.bot.step)
+        self.assertRegex(text, r"look: live, 1 room, posted in [\d.]+ s; list \d+ s old \(age 4\); "
+                               r"GET rooms [\d.]+ s, GET summary [\d.]+ s, POST webhook [\d.]+ s")
+        text = self.logged(lambda: self.bot.step(late=7.4))
+        self.assertIn("look (7 s late): live, 1 room, no change in", text)
+        self.assertNotIn("PATCH", text)
+        self.world["api_down"] = True
+        self.assertIn("GET rooms", self.logged(self.bot.step))
+        self.assertIn("(503)", self.logged(self.bot.step))
+        self.assertNotIn("tok", self.logged(lambda: self.bot.step(force=True)))
+
+    def test_untraced_logs_only_slow_calls_and_looks(self):
+        self.assertNotIn("look:", self.logged(self.bot.step))
+        old = bot.SLOW_CALL, bot.SLOW_LOOK
+        bot.SLOW_CALL = bot.SLOW_LOOK = 0.0
+        try:
+            text = self.logged(lambda: self.bot.step(force=True))
+        finally:
+            bot.SLOW_CALL, bot.SLOW_LOOK = old
+        self.assertIn("slow call: PATCH message took", text)
+        self.assertIn("look: live, 1 room, edited (refresh) in", text)
+        self.assertNotIn("tok", text)
+
+    def test_list_falling_behind_is_logged(self):
+        self.world["rooms"] = rooms_doc([room()], updated=int((time.time() - 70) * 1000))
+        self.assertIn("the rooms list is 70 s old", self.logged(self.bot.step))
+        self.assertNotIn("rooms list", self.logged(self.bot.step))  # once
+        self.world["rooms"] = rooms_doc([room()])
+        self.assertRegex(self.logged(self.bot.step), r"fresh again \(0 s old; it had not moved for 7\d s\)")
 
     def notices(self):
         return [mid for mid, m in self.world["messages"].items() if m.get("content") == "New room opened"]
