@@ -35,6 +35,18 @@ unread.
   the message says since when and shows no rooms; when the API cannot be
   reached for 2 minutes it says that. On `docker compose stop` it marks the
   message as not updating.
+- **Only the latest version's rooms.** The game lists only rooms of its own
+  SFVR version (the exact string, so 0.3.0 and 0.3.0.1 do not mix) and leaves
+  another version's room as soon as it joins one by code. So by default the
+  bot lists only the rooms of the latest release, which it reads from the
+  update info the mod's updater uses (`https://sfvr.pages.dev/update.json`,
+  its `version`) every 5 minutes. The heading says which version, and how
+  many rooms on other versions were left out; the totals count only listed
+  rooms (the players online stay everyone's). A release shows up within
+  5 minutes of being on the site, and its rooms then count as new (a notice).
+  If the site cannot be read, it keeps the last version it read, or lists
+  every version (each card naming its own) until it first can.
+  `ROOM_VERSIONS` changes this.
 - Up to 9 rooms (Discord's 10 embeds less the heading); past that, or past
   6,000 characters, it shows fewer players a room, then "and N more rooms".
 - A room's rules are its first table's (all the API carries): "Rules:" for
@@ -106,7 +118,9 @@ here do.
 | `FAIL_AFTER` | 120 | seconds of API failures before the message says it cannot be reached |
 | `HEADING` | SFVR public rooms | the message's heading |
 | `MAX_ROOMS` | 9 | the most room cards (at most 9) |
-| `ROOM_VERSIONS` | every version | SFVR versions listed, comma-separated (`0.3.0`) |
+| `ROOM_VERSIONS` | latest | whose rooms are listed: `latest`, `all`, or versions, comma-separated (`latest,0.3.0`) |
+| `LATEST_URL` | `https://sfvr.pages.dev/update.json` | the update info the latest release is read from (its `version`) |
+| `LATEST_EVERY` | 300 | seconds between reads of it (at least 60) |
 | `NEW_ROOM_NOTICE` | 1 | 0: no new room notices |
 | `NEW_ROOM_TEXT` | New room opened | the notice's text |
 | `NEW_ROOM_DELETE_AFTER` | 5 | seconds before the notice is deleted |

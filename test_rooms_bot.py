@@ -40,7 +40,8 @@ def summary_doc(online=12, rooms=()):
                        "public_rooms": len(rooms)}}
 
 
-SETTINGS = dict(bot.load_settings(), poll=20.0, refresh=300.0, fail_after=0.0, versions=[], notify=False)
+SETTINGS = dict(bot.load_settings(), poll=20.0, refresh=300.0, fail_after=0.0, versions=["all"], notify=False,
+                latest_url="")
 NOTIFY = dict(notify=True, notify_text="New room opened", notify_delete=5.0, notify_cooldown=60.0)
 
 
@@ -112,9 +113,46 @@ class Render(unittest.TestCase):
 
     def test_version_filter(self):
         rooms = [room(code="AAAAAA", sfvr_version="0.3.0"), room(code="BBBBBB", sfvr_version="0.3.1")]
-        p = bot.render(rooms_doc(rooms), None, "live", dict(SETTINGS, versions=["0.3.1"]), 1)
+        s = dict(SETTINGS, versions=["0.3.1"])
+        bot.resolve_versions(s, None)
+        p = bot.render(rooms_doc(rooms), None, "live", s, 1)
         self.assertEqual(len(p["embeds"]), 2)
         self.assertIn("BBBBBB", p["embeds"][1]["description"])
+        self.assertNotIn("SFVR 0.3.1", p["embeds"][1]["description"])  # one version: not on each card
+        self.assertIn("Rooms on SFVR **0.3.1** (1 room on other versions not listed).", p["embeds"][0]["description"])
+
+    def test_latest_version(self):
+        rooms = [room(code="AAAAAA", sfvr_version="0.3.0"), room(code="BBBBBB", sfvr_version="0.3.0.1")]
+        s = dict(SETTINGS, versions=["latest"])
+        bot.resolve_versions(s, "0.3.0.1")
+        p = bot.render(rooms_doc(rooms), summary_doc(9, rooms), "live", s, 1)
+        head = p["embeds"][0]["description"]
+        self.assertEqual(len(p["embeds"]), 2)
+        self.assertIn("**1** public room · **3** in them", head)
+        self.assertIn("Rooms on SFVR **0.3.0.1**, the latest version (1 room on other versions not listed).", head)
+        # Not known yet: every version, each card naming its own.
+        bot.resolve_versions(s, None)
+        p = bot.render(rooms_doc(rooms), None, "live", s, 1)
+        self.assertEqual(len(p["embeds"]), 3)
+        self.assertIn("**Code `AAAAAA`** · SFVR 0.3.0\n", p["embeds"][1]["description"])
+        self.assertNotIn("Rooms on SFVR", p["embeds"][0]["description"])
+        # Latest plus an older one.
+        s = dict(SETTINGS, versions=["latest", "0.3.0"])
+        bot.resolve_versions(s, "0.3.0.1")
+        p = bot.render(rooms_doc(rooms), None, "live", s, 1)
+        self.assertEqual(len(p["embeds"]), 3)
+        self.assertIn("Rooms on SFVR **0.3.0**, **0.3.0.1**.", p["embeds"][0]["description"])
+
+    def test_default_setting_is_latest(self):
+        old = os.environ.pop("ROOM_VERSIONS", None)
+        try:
+            self.assertEqual(bot.load_settings()["versions"], ["latest"])
+            os.environ["ROOM_VERSIONS"] = "All"
+            self.assertEqual(bot.load_settings()["versions"], ["all"])
+        finally:
+            os.environ.pop("ROOM_VERSIONS", None)
+            if old is not None:
+                os.environ["ROOM_VERSIONS"] = old
 
     def test_checked_time_alone_is_no_change(self):
         a = bot.render(rooms_doc([room()]), None, "live", SETTINGS, 1000)
@@ -145,6 +183,11 @@ class Fake(http.server.BaseHTTPRequestHandler):
             return self._send(200, w["rooms"])
         if self.path == "/v1/summary":
             return self._send(200, w["summary"])
+        if self.path == "/update.json":
+            w["update_reads"] += 1
+            if w["update"] is None:
+                return self._send(404, {"error": "not found"})
+            return self._send(200, w["update"])
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -191,7 +234,8 @@ class Fake(http.server.BaseHTTPRequestHandler):
 class Loop(unittest.TestCase):
     def setUp(self):
         self.world = {"rooms": rooms_doc([room()]), "summary": summary_doc(5, [room()]), "api_down": False,
-                      "messages": {}, "next_id": 100, "log": [], "limit_once": False, "delete_fails": False}
+                      "messages": {}, "next_id": 100, "log": [], "limit_once": False, "delete_fails": False,
+                      "update": {"product": "SFVR", "version": "0.3.0.1"}, "update_reads": 0}
         Fake.world = self.world
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -346,6 +390,39 @@ class Loop(unittest.TestCase):
         self.bot.stopped()
         self.assertEqual(self.notices(), [])
         self.assertIn("not updating", self.last()["embeds"][0]["description"])
+
+    def test_latest_from_update_info(self):
+        self.world["rooms"] = rooms_doc([room(code="AAAAAA", sfvr_version="0.3.0"),
+                                         room(code="BBBBBB", sfvr_version="0.3.0.1")])
+        self.make(versions=["latest"], latest_url=self.base + "/update.json", latest_every=300.0, **NOTIFY)
+        self.bot.step()
+        self.assertEqual(len(self.last()["embeds"]), 2)
+        self.assertIn("BBBBBB", self.last()["embeds"][1]["description"])
+        self.bot.step()
+        self.assertEqual(self.world["update_reads"], 1)  # read every 300 s, not every look
+        # A release: 0.3.1 is the latest; its rooms are listed (and announced as new).
+        self.world["update"] = {"product": "SFVR", "version": "0.3.1"}
+        self.world["rooms"] = rooms_doc([room(code="BBBBBB", sfvr_version="0.3.0.1"),
+                                         room(code="CCCCCC", sfvr_version="0.3.1")])
+        self.bot.latest.next = 0
+        self.bot.step()
+        self.assertEqual(len(self.last()["embeds"]), 2)
+        self.assertIn("CCCCCC", self.last()["embeds"][1]["description"])
+        self.assertEqual(len(self.notices()), 1)
+        # The site down: the last version read is kept.
+        self.world["update"] = None
+        self.bot.latest.next = 0
+        self.bot.step(force=True)
+        self.assertIn("**0.3.1**, the latest", self.last()["embeds"][0]["description"])
+
+    def test_latest_unknown_lists_everything(self):
+        self.world["update"] = {"product": "other", "version": "9.9"}
+        self.world["rooms"] = rooms_doc([room(code="AAAAAA", sfvr_version="0.3.0"),
+                                         room(code="BBBBBB", sfvr_version="0.3.0.1")])
+        self.make(versions=["latest"], latest_url=self.base + "/update.json", latest_every=300.0)
+        self.bot.step()
+        self.assertEqual(len(self.last()["embeds"]), 3)
+        self.assertLessEqual(self.bot.latest.next - time.time(), 61)  # asks again sooner
 
     def test_stopped_notice(self):
         self.bot.step()

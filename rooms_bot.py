@@ -18,6 +18,12 @@
 # The message's id is kept in STATE_DIR/state.json; MESSAGE_ID adopts an
 # existing message instead (one this webhook posted).
 #
+# It lists only the rooms of the latest SFVR release by default (ROOM_VERSIONS
+# "latest"): the game lists only its own version's rooms and leaves another
+# version's room at once. The latest release is the "version" of the update
+# info the mod's updater reads (LATEST_URL, the SFVR site's update.json),
+# read every LATEST_EVERY seconds (300).
+#
 # When a public room opens it also posts a short notice ("New room opened")
 # and deletes it NEW_ROOM_DELETE_AFTER seconds later (5): the channel shows
 # as unread, without a pile of messages. None for the rooms already open
@@ -135,7 +141,7 @@ def plural(n, one, many=None):
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
-def room_embed(room, player_cap):
+def room_embed(room, player_cap, show_version=True):
     code = str(room.get("code", ""))
     code_text = f"`{code}`" if CODE_RE.match(code) else escape(code)
     owner = room.get("owner") or ""
@@ -154,7 +160,7 @@ def room_embed(room, player_cap):
 
     version = room.get("sfvr_version")
     lines = [
-        f"**Code {code_text}**" + (f" · SFVR {escape(version)}" if version else ""),
+        f"**Code {code_text}**" + (f" · SFVR {escape(version)}" if version and show_version else ""),
         f"{members}/{capacity} players · {plural(tables, 'table')} · {seat_text}",
     ]
     # The API carries the first table's rules only; other tables may differ.
@@ -201,14 +207,36 @@ def embed_size(embed):
     return size
 
 
-def listed_rooms(rooms_doc, settings):
-    """The rooms the message lists: every public room, or the chosen versions'."""
-    rooms = []
+def all_rooms(rooms_doc):
     if rooms_doc and isinstance(rooms_doc.get("rooms"), list):
-        rooms = [r for r in rooms_doc["rooms"] if isinstance(r, dict)]
-        if settings["versions"]:
-            rooms = [r for r in rooms if r.get("sfvr_version") in settings["versions"]]
+        return [r for r in rooms_doc["rooms"] if isinstance(r, dict)]
+    return []
+
+
+def listed_rooms(rooms_doc, settings):
+    """The rooms the message lists: those of settings["shown"] (a set of
+    versions; None: every version). The game lists only its own version's
+    rooms and leaves another version's room at once, so by default that is
+    the latest release's."""
+    shown = settings.get("shown")
+    rooms = all_rooms(rooms_doc)
+    if shown is not None:
+        rooms = [r for r in rooms if r.get("sfvr_version") in shown]
     return rooms
+
+
+def resolve_versions(settings, latest):
+    """settings["versions"] (ROOM_VERSIONS: "latest", "all", or versions) as
+    settings["shown"], with `latest` the latest release (None: unknown, then
+    every version is listed rather than none)."""
+    tokens = settings["versions"]
+    settings["latest"] = latest
+    if not tokens or "all" in tokens:
+        settings["shown"] = None
+        return
+    shown = {latest if t == "latest" else t for t in tokens}
+    shown.discard(None)
+    settings["shown"] = shown or None
 
 
 def render(rooms_doc, summary_doc, state, settings, checked):
@@ -232,6 +260,17 @@ def render(rooms_doc, summary_doc, state, settings, checked):
         in_rooms = sum(int(r.get("members") or 0) for r in rooms)
         line.append(f"**{in_rooms}** in them")
         lines.append("🟢 " + " · ".join(line))
+        shown = settings.get("shown")
+        if shown:
+            hidden = len(all_rooms(rooms_doc)) - len(rooms)
+            latest = settings.get("latest")
+            if shown == {latest}:
+                text = f"Rooms on SFVR **{escape(latest)}**, the latest version"
+            else:
+                text = "Rooms on SFVR " + ", ".join(f"**{escape(v)}**" for v in sorted(shown))
+            if hidden > 0:
+                text += f" ({plural(hidden, 'room')} on other versions not listed)"
+            lines.append(text + ".")
         if rooms:
             lines.append("Join in the game: **Custom Rooms → Join with a code**.")
         else:
@@ -263,8 +302,11 @@ def render(rooms_doc, summary_doc, state, settings, checked):
     def fits(embeds):
         return embed_size(header) + sum(embed_size(e) for e in embeds) <= MAX_TOTAL - 100
 
+    # A card names its version only when the list holds more than one.
+    shown = settings.get("shown")
+    show_versions = not (shown and len(shown) == 1)
     for cap in (16, 8, 4, 0):
-        embeds = [room_embed(r, cap) for r in picked]
+        embeds = [room_embed(r, cap, show_versions) for r in picked]
         if fits(embeds):
             break
     while embeds and not fits(embeds):
@@ -330,6 +372,44 @@ class RoomsApi:
         if not isinstance(doc, dict) or doc.get("version") != 1:
             raise ValueError(f"{path}: not a version 1 answer")
         return doc
+
+
+VERSION_RE = re.compile(r"^\d+(\.\d+){1,3}$")
+
+
+class Latest:
+    """The latest SFVR release, from the update info the mod's updater reads
+    (the SFVR site's update.json, its "version"). Read every `every` seconds;
+    the last one read is kept while the site does not answer."""
+
+    def __init__(self, url, every):
+        self.url = url
+        self.every = every
+        self.version = None
+        self.next = 0.0
+        self.said_failing = False
+
+    def get(self, now):
+        if not self.url or now < self.next:
+            return self.version
+        self.next = now + self.every
+        try:
+            _, doc = request("GET", self.url, timeout=15)
+            version = doc.get("version") if isinstance(doc, dict) and doc.get("product") == "SFVR" else None
+            if not isinstance(version, str) or not VERSION_RE.match(version):
+                raise ValueError("no SFVR version in it")
+        except (HttpError, ValueError, OSError) as e:
+            if not self.said_failing:
+                keep = f"keeping {self.version}" if self.version else "listing every version until it answers"
+                log(f"rooms-bot: cannot read the latest version from {self.url} ({e}); {keep}")
+                self.said_failing = True
+            if self.version is None:
+                self.next = now + min(self.every, 60)
+            return self.version
+        if version != self.version:
+            log(f"rooms-bot: latest SFVR version {version}" + (f" (was {self.version})" if self.version else ""))
+        self.version, self.said_failing = version, False
+        return self.version
 
 
 class Discord:
@@ -435,6 +515,7 @@ class Bot:
                         for n in (saved.get("notices") or []) if same and isinstance(n, dict) and n.get("id")]
         self.known = None  # the listed rooms' codes at the last look; None: no baseline yet
         self.last_notice = 0.0
+        self.latest = Latest(settings["latest_url"], settings["latest_every"])
         self.last_key = None
         self.last_edit = 0.0
         self.rooms_doc = None
@@ -546,6 +627,10 @@ class Bot:
             self.save()
 
     def step(self, force=False):
+        if "latest" in self.settings["versions"]:
+            resolve_versions(self.settings, self.latest.get(time.time()))
+        else:
+            resolve_versions(self.settings, None)
         shown = self.fetch()
         if shown is None:
             self.state.alive()
@@ -574,7 +659,7 @@ class Bot:
             log("rooms-bot: Discord updates working again")
             self.discord_failing = False
         if key != self.last_key:
-            rooms = len(self.rooms_doc.get("rooms") or []) if self.rooms_doc else 0
+            rooms = len(listed_rooms(self.rooms_doc, self.settings))
             log(f"rooms-bot: message updated ({shown}, {plural(rooms, 'room')})")
         self.last_key, self.last_edit = key, now
         # After the edit, so whoever the notice brings in finds the room listed.
@@ -594,7 +679,8 @@ class Bot:
 
 
 def load_settings():
-    versions = [v.strip() for v in os.environ.get("ROOM_VERSIONS", "").split(",") if v.strip()]
+    # "latest" (the default), "all", or SFVR versions, comma-separated.
+    versions = [v.strip().lower() for v in (os.environ.get("ROOM_VERSIONS", "") or "latest").split(",") if v.strip()]
     return {
         "poll": env_float("POLL_EVERY", 20, 10),
         "refresh": env_float("REFRESH_EVERY", 300, 30),
@@ -602,6 +688,10 @@ def load_settings():
         "max_rooms": int(env_float("MAX_ROOMS", 9, 0)),
         "heading": os.environ.get("HEADING", "") or "SFVR public rooms",
         "versions": versions,
+        "latest_url": (os.environ.get("LATEST_URL", "") or "https://sfvr.pages.dev/update.json").strip(),
+        "latest_every": env_float("LATEST_EVERY", 300, 60),
+        "shown": None,
+        "latest": None,
         "message_id": os.environ.get("MESSAGE_ID", "").strip() or None,
         "offline_notice": os.environ.get("OFFLINE_NOTICE", "1").strip() not in ("0", "false", "no", ""),
         "notify": os.environ.get("NEW_ROOM_NOTICE", "1").strip() not in ("0", "false", "no", ""),
@@ -637,6 +727,8 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
         rooms = api.get("/v1/rooms")
         summary = api.get("/v1/summary")
+        latest = Latest(settings["latest_url"], settings["latest_every"]).get(time.time())
+        resolve_versions(settings, latest if "latest" in settings["versions"] else None)
         shown = "stale" if rooms.get("stale") else "live"
         print(json.dumps(render(rooms, summary, shown, settings, time.time()), indent=2, ensure_ascii=False))
         return
