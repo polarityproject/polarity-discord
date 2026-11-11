@@ -18,7 +18,7 @@ import rooms_bot as bot
 def room(code="4SLJEV", **kw):
     doc = {
         "code": code, "title": "Karin user looking for M. Bison!", "title_id": 3,
-        "title_characters": ["KRN", "VEG"], "owner": "POLARITYDEV", "sfvr_version": "0.3.0",
+        "title_characters": ["KRN", "VEG"], "owner": "POLARITYDEV", "client_version": "0.3.0",
         "members": 3, "capacity": 16, "tables": 2, "open_seats": 2,
         "rules": "r1 ft2 bo3 t99 ws3", "faces": ["RYU", "KEN"],
         "players": [
@@ -62,7 +62,7 @@ class Render(unittest.TestCase):
         self.assertNotIn("footer", head)
         self.assertEqual(card["title"], "Karin user looking for M. Bison!")
         self.assertIn("**Code `4SLJEV`**", card["description"])
-        self.assertIn("**Code `4SLJEV`** · SFVR 0.3.0\n3/16 players · 2 tables", card["description"])
+        self.assertIn("**Code `4SLJEV`** · Polarity 0.3.0\n3/16 players · 2 tables", card["description"])
         self.assertIn("Table 1 rules: First to 2 · winner stays, up to 3 · 99 seconds *(other tables may differ)*",
                       card["description"])
         one = bot.room_embed(room(tables=1), 16)["description"]
@@ -113,37 +113,47 @@ class Render(unittest.TestCase):
         self.assertIn("more room", p["embeds"][0]["description"])
         self.assertEqual(p["embeds"][1]["color"], bot.COLOR_FULL)
 
+    def test_old_version_field(self):
+        # A keeper before 0.4.0 sends sfvr_version only.
+        old = room(code="AAAAAA", sfvr_version="0.3.1")
+        del old["client_version"]
+        self.assertEqual(bot.room_version(old), "0.3.1")
+        s = dict(SETTINGS, versions=["0.3.1"])
+        bot.resolve_versions(s, None)
+        p = bot.render(rooms_doc([old]), None, "live", s, 1)
+        self.assertIn("AAAAAA", p["embeds"][1]["description"])
+
     def test_version_filter(self):
-        rooms = [room(code="AAAAAA", sfvr_version="0.3.0"), room(code="BBBBBB", sfvr_version="0.3.1")]
+        rooms = [room(code="AAAAAA", client_version="0.3.0"), room(code="BBBBBB", client_version="0.3.1")]
         s = dict(SETTINGS, versions=["0.3.1"])
         bot.resolve_versions(s, None)
         p = bot.render(rooms_doc(rooms), None, "live", s, 1)
         self.assertEqual(len(p["embeds"]), 2)
         self.assertIn("BBBBBB", p["embeds"][1]["description"])
-        self.assertNotIn("SFVR 0.3.1", p["embeds"][1]["description"])  # one version: not on each card
-        self.assertIn("Rooms on SFVR **0.3.1** (1 room on other versions not listed).", p["embeds"][0]["description"])
+        self.assertNotIn("Polarity 0.3.1", p["embeds"][1]["description"])  # one version: not on each card
+        self.assertIn("Rooms on Polarity **0.3.1** (1 room on other versions not listed).", p["embeds"][0]["description"])
 
     def test_latest_version(self):
-        rooms = [room(code="AAAAAA", sfvr_version="0.3.0"), room(code="BBBBBB", sfvr_version="0.3.0.1")]
+        rooms = [room(code="AAAAAA", client_version="0.3.0"), room(code="BBBBBB", client_version="0.3.0.1")]
         s = dict(SETTINGS, versions=["latest"])
         bot.resolve_versions(s, "0.3.0.1")
         p = bot.render(rooms_doc(rooms), summary_doc(9, rooms), "live", s, 1)
         head = p["embeds"][0]["description"]
         self.assertEqual(len(p["embeds"]), 2)
         self.assertIn("**1** public room · **3** in them", head)
-        self.assertIn("Rooms on SFVR **0.3.0.1**, the latest version (1 room on other versions not listed).", head)
+        self.assertIn("Rooms on Polarity **0.3.0.1**, the latest version (1 room on other versions not listed).", head)
         # Not known yet: every version, each card naming its own.
         bot.resolve_versions(s, None)
         p = bot.render(rooms_doc(rooms), None, "live", s, 1)
         self.assertEqual(len(p["embeds"]), 3)
-        self.assertIn("**Code `AAAAAA`** · SFVR 0.3.0\n", p["embeds"][1]["description"])
-        self.assertNotIn("Rooms on SFVR", p["embeds"][0]["description"])
+        self.assertIn("**Code `AAAAAA`** · Polarity 0.3.0\n", p["embeds"][1]["description"])
+        self.assertNotIn("Rooms on Polarity", p["embeds"][0]["description"])
         # Latest plus an older one.
         s = dict(SETTINGS, versions=["latest", "0.3.0"])
         bot.resolve_versions(s, "0.3.0.1")
         p = bot.render(rooms_doc(rooms), None, "live", s, 1)
         self.assertEqual(len(p["embeds"]), 3)
-        self.assertIn("Rooms on SFVR **0.3.0**, **0.3.0.1**.", p["embeds"][0]["description"])
+        self.assertIn("Rooms on Polarity **0.3.0**, **0.3.0.1**.", p["embeds"][0]["description"])
 
     def test_default_setting_is_latest(self):
         old = os.environ.pop("ROOM_VERSIONS", None)
@@ -237,7 +247,7 @@ class Loop(unittest.TestCase):
     def setUp(self):
         self.world = {"rooms": rooms_doc([room()]), "summary": summary_doc(5, [room()]), "api_down": False,
                       "messages": {}, "next_id": 100, "log": [], "limit_once": False, "delete_fails": False,
-                      "update": {"product": "SFVR", "version": "0.3.0.1"}, "update_reads": 0}
+                      "update": {"product": "Polarity", "version": "0.3.0.1"}, "update_reads": 0}
         Fake.world = self.world
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -406,7 +416,7 @@ class Loop(unittest.TestCase):
         self.bot.step()
         self.world["rooms"] = rooms_doc([room(), room(code="ZZZZZZ")])
         self.bot.step()  # back from stale: what is there is not "new"
-        self.world["rooms"] = rooms_doc([room(), room(code="ZZZZZZ"), room(code="OLDOLD", sfvr_version="0.2.6")])
+        self.world["rooms"] = rooms_doc([room(), room(code="ZZZZZZ"), room(code="OLDOLD", client_version="0.2.6")])
         self.bot.step()  # not a listed version
         self.assertEqual(self.notices(), [])
 
@@ -443,8 +453,8 @@ class Loop(unittest.TestCase):
         self.assertIn("not updating", self.last()["embeds"][0]["description"])
 
     def test_latest_from_update_info(self):
-        self.world["rooms"] = rooms_doc([room(code="AAAAAA", sfvr_version="0.3.0"),
-                                         room(code="BBBBBB", sfvr_version="0.3.0.1")])
+        self.world["rooms"] = rooms_doc([room(code="AAAAAA", client_version="0.3.0"),
+                                         room(code="BBBBBB", client_version="0.3.0.1")])
         self.make(versions=["latest"], latest_url=self.base + "/update.json", latest_every=300.0, **NOTIFY)
         self.bot.step()
         self.assertEqual(len(self.last()["embeds"]), 2)
@@ -452,9 +462,10 @@ class Loop(unittest.TestCase):
         self.bot.step()
         self.assertEqual(self.world["update_reads"], 1)  # read every 300 s, not every look
         # A release: 0.3.1 is the latest; its rooms are listed (and announced as new).
+        # The old site's update info (product SFVR) is read too.
         self.world["update"] = {"product": "SFVR", "version": "0.3.1"}
-        self.world["rooms"] = rooms_doc([room(code="BBBBBB", sfvr_version="0.3.0.1"),
-                                         room(code="CCCCCC", sfvr_version="0.3.1")])
+        self.world["rooms"] = rooms_doc([room(code="BBBBBB", client_version="0.3.0.1"),
+                                         room(code="CCCCCC", client_version="0.3.1")])
         self.bot.latest.next = 0
         self.bot.step()
         self.assertEqual(len(self.last()["embeds"]), 2)
@@ -468,8 +479,8 @@ class Loop(unittest.TestCase):
 
     def test_latest_unknown_lists_everything(self):
         self.world["update"] = {"product": "other", "version": "9.9"}
-        self.world["rooms"] = rooms_doc([room(code="AAAAAA", sfvr_version="0.3.0"),
-                                         room(code="BBBBBB", sfvr_version="0.3.0.1")])
+        self.world["rooms"] = rooms_doc([room(code="AAAAAA", client_version="0.3.0"),
+                                         room(code="BBBBBB", client_version="0.3.0.1")])
         self.make(versions=["latest"], latest_url=self.base + "/update.json", latest_every=300.0)
         self.bot.step()
         self.assertEqual(len(self.last()["embeds"]), 3)

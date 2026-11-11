@@ -1,4 +1,4 @@
-# sfvr-discord (rooms_bot.py): one Discord message kept showing SFVR's public
+# polarity-discord (rooms_bot.py): one Discord message kept showing Polarity's public
 # rooms from the rooms API. Built by compose.yaml.
 FROM python:3.12.7-alpine3.20
 COPY rooms_bot.py /usr/local/bin/rooms_bot.py

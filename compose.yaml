@@ -1,13 +1,13 @@
-# sfvr-discord: one message in a Discord channel kept showing SFVR's public
+# polarity-discord: one message in a Discord channel kept showing Polarity's public
 # rooms, read from the rooms API (README.md). Outbound HTTPS only; it listens
 # on nothing. Run from this folder:
 #   docker compose up -d --build
-name: sfvr-discord
+name: polarity-discord
 
 services:
   bot:
     build: {context: .}
-    image: sfvr-discord/bot:latest
+    image: polarity-discord/bot:latest
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]

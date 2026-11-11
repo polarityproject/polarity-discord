@@ -1,13 +1,13 @@
-# sfvr-discord
+# polarity-discord
 
-A Discord bot for SFVR, the Street Fighter V rollback netplay mod: one
+A Discord bot for Polarity, the Street Fighter V rollback netplay mod: one
 message in a Discord channel, kept showing the public custom rooms. It reads
-the public rooms API (specified in the `sfvr-server` repository,
+the public rooms API (specified in the `polarity-server` repository,
 `docs/rooms-api.md`) like any other tool, and runs on its own in Docker,
 on the rooms VPS or anywhere else.
 
 The message: a heading with the players online, the public rooms and the
-players in them, then a card per room (title, code, SFVR version, players,
+players in them, then a card per room (title, code, Polarity version, players,
 tables, open seats, the first table's rules, each member's flag and
 character, the owner marked). When a public room opens it also posts "New
 room opened" and deletes it a few seconds later, so the channel shows as
@@ -39,10 +39,10 @@ unread.
   reached for 2 minutes it says that. On `docker compose stop` it marks the
   message as not updating.
 - **Only the latest version's rooms.** The game lists only rooms of its own
-  SFVR version (the exact string, so 0.3.0 and 0.3.0.1 do not mix) and leaves
+  Polarity version (the exact string, so 0.3.0 and 0.3.0.1 do not mix) and leaves
   another version's room as soon as it joins one by code. So by default the
   bot lists only the rooms of the latest release, which it reads from the
-  update info the mod's updater uses (`https://sfvr.pages.dev/update.json`,
+  update info the mod's updater uses (`https://polaritymod.link/update.json`,
   its `version`) every 5 minutes. The heading says which version, and how
   many rooms on other versions were left out; the totals count only listed
   rooms (the players online stay everyone's). A release shows up within
@@ -72,7 +72,7 @@ unread.
 ## Set it up
 
 In Discord: the channel's **Edit Channel**, **Integrations**, **Webhooks**,
-**New Webhook**; name it (say "SFVR rooms") and give it an avatar before the
+**New Webhook**; name it (say "Polarity rooms") and give it an avatar before the
 bot's first post (a message keeps the name it was posted with), then **Copy
 Webhook URL**. Anyone with that URL can post there: keep it like a password.
 Best in a channel where only the webhook posts (a read-only "rooms"
@@ -83,16 +83,16 @@ On your PC, pack the repository (committed files only, so a local
 
 ```powershell
 cd D:\SteamLibrary\steamapps\common\StreetFighterV
-git -C sfvr-discord archive --format=tar.gz -o ..\sfvr-discord.tgz main
-scp ..\sfvr-discord.tgz polarityadmin@<vps>:~
+git -C polarity-discord archive --format=tar.gz -o ..\polarity-discord.tgz main
+scp ..\polarity-discord.tgz polarityadmin@<vps>:~
 ```
 
-On the VPS (Docker as in sfvr-server's `docs/rooms-vps-docker.md`):
+On the VPS (Docker as in polarity-server's `docs/rooms-vps-docker.md`):
 
 ```bash
-sudo mkdir -p /opt/sfvr-discord
-sudo tar -xzf ~/sfvr-discord.tgz -C /opt/sfvr-discord
-cd /opt/sfvr-discord
+sudo mkdir -p /opt/polarity-discord
+sudo tar -xzf ~/polarity-discord.tgz -C /opt/polarity-discord
+cd /opt/polarity-discord
 sudo install -d -m 0700 secrets
 sudo sh -c 'cat > secrets/discord_webhook'    # paste the URL, Enter, Ctrl+D
 sudo chmod 0444 secrets/discord_webhook
@@ -104,7 +104,7 @@ sudo docker compose logs bot
 The log says `posted message <id>`, and the message is in the channel.
 `sudo docker compose ps` shows it `healthy` after a minute.
 
-It is its own compose project (`sfvr-discord`), apart from the rooms stack:
+It is its own compose project (`polarity-discord`), apart from the rooms stack:
 the rooms stack's dashboards (its `container-stats`, which lists the
 `sfvr-rooms` project only) do not show it; `docker compose ps` and `logs`
 here do.
@@ -119,10 +119,10 @@ here do.
 | `POLL_EVERY` | 20 | seconds between reads (at least 10) |
 | `REFRESH_EVERY` | 20 | the longest without an edit while nothing changes (the "last checked" time; at least 10; at or under `POLL_EVERY`: every look) |
 | `FAIL_AFTER` | 120 | seconds of API failures before the message says it cannot be reached |
-| `HEADING` | SFVR public rooms | the message's heading |
+| `HEADING` | Polarity public rooms | the message's heading |
 | `MAX_ROOMS` | 9 | the most room cards (at most 9) |
 | `ROOM_VERSIONS` | latest | whose rooms are listed: `latest`, `all`, or versions, comma-separated (`latest,0.3.0`) |
-| `LATEST_URL` | `https://sfvr.pages.dev/update.json` | the update info the latest release is read from (its `version`) |
+| `LATEST_URL` | `https://polaritymod.link/update.json` | the update info the latest release is read from (its `version`) |
 | `LATEST_EVERY` | 300 | seconds between reads of it (at least 60) |
 | `NEW_ROOM_NOTICE` | 1 | 0: no new room notices |
 | `NEW_ROOM_TEXT` | New room opened | the notice's text |
@@ -172,7 +172,7 @@ log line written late.
 | Another channel | a webhook there, its URL in `secrets/discord_webhook`, `sudo docker compose up -d --force-recreate`: it posts a new message there (the old one stays; delete it by hand) |
 | A new webhook URL, same channel | the same; the new webhook cannot edit the old one's message, so it posts a new one |
 | A message deleted | nothing: it posts a new one at its next look |
-| A new version | pack and copy as above, untar over `/opt/sfvr-discord`, `sudo docker compose up -d --build` |
+| A new version | pack and copy as above, untar over `/opt/polarity-discord`, `sudo docker compose up -d --build` |
 | Image security fixes | `sudo docker compose build --pull && sudo docker compose up -d` |
 | Stop it | `sudo docker compose stop` (the message says it is stopped); `sudo docker compose down` removes the container, `down -v` the saved message id too |
 

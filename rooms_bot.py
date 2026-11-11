@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# sfvr-discord: keeps one message in a Discord channel showing SFVR's public
-# custom rooms, read from the rooms API (sfvr-server's docs/rooms-api.md). It edits
+# polarity-discord: keeps one message in a Discord channel showing Polarity's public
+# custom rooms, read from the rooms API (polarity-server's docs/rooms-api.md). It edits
 # that one message in place; it never posts a second one unless the first is
 # deleted.
 #
@@ -18,10 +18,10 @@
 # The message's id is kept in STATE_DIR/state.json; MESSAGE_ID adopts an
 # existing message instead (one this webhook posted).
 #
-# It lists only the rooms of the latest SFVR release by default (ROOM_VERSIONS
+# It lists only the rooms of the latest Polarity release by default (ROOM_VERSIONS
 # "latest"): the game lists only its own version's rooms and leaves another
 # version's room at once. The latest release is the "version" of the update
-# info the mod's updater reads (LATEST_URL, the SFVR site's update.json),
+# info the mod's updater reads (LATEST_URL, the Polarity site's update.json),
 # read every LATEST_EVERY seconds (300).
 #
 # When a public room opens it also posts a short notice ("New room opened")
@@ -44,7 +44,7 @@ import urllib.parse
 import urllib.request
 
 VERSION = "1"
-USER_AGENT = f"DiscordBot (https://sfvr.pages.dev, {VERSION}) sfvr-rooms-discord"
+USER_AGENT = f"DiscordBot (https://polaritymod.link, {VERSION}) polarity-rooms-discord"
 
 # Discord's limits on one message (embeds).
 MAX_EMBEDS = 10
@@ -175,9 +175,9 @@ def room_embed(room, player_cap, show_version=True):
     else:
         color, seat_text = COLOR_FULL, "full"
 
-    version = room.get("sfvr_version")
+    version = room_version(room)
     lines = [
-        f"**Code {code_text}**" + (f" · SFVR {escape(version)}" if version and show_version else ""),
+        f"**Code {code_text}**" + (f" · Polarity {escape(version)}" if version and show_version else ""),
         f"{members}/{capacity} players · {plural(tables, 'table')} · {seat_text}",
     ]
     # The API carries the first table's rules only; other tables may differ.
@@ -224,6 +224,12 @@ def embed_size(embed):
     return size
 
 
+def room_version(room):
+    """The Polarity version a room plays: client_version, else sfvr_version
+    (its name from keepers before 0.4.0)."""
+    return room.get("client_version") or room.get("sfvr_version")
+
+
 def all_rooms(rooms_doc):
     if rooms_doc and isinstance(rooms_doc.get("rooms"), list):
         return [r for r in rooms_doc["rooms"] if isinstance(r, dict)]
@@ -238,7 +244,7 @@ def listed_rooms(rooms_doc, settings):
     shown = settings.get("shown")
     rooms = all_rooms(rooms_doc)
     if shown is not None:
-        rooms = [r for r in rooms if r.get("sfvr_version") in shown]
+        rooms = [r for r in rooms if room_version(r) in shown]
     return rooms
 
 
@@ -282,9 +288,9 @@ def render(rooms_doc, summary_doc, state, settings, checked):
             hidden = len(all_rooms(rooms_doc)) - len(rooms)
             latest = settings.get("latest")
             if shown == {latest}:
-                text = f"Rooms on SFVR **{escape(latest)}**, the latest version"
+                text = f"Rooms on Polarity **{escape(latest)}**, the latest version"
             else:
-                text = "Rooms on SFVR " + ", ".join(f"**{escape(v)}**" for v in sorted(shown))
+                text = "Rooms on Polarity " + ", ".join(f"**{escape(v)}**" for v in sorted(shown))
             if hidden > 0:
                 text += f" ({plural(hidden, 'room')} on other versions not listed)"
             lines.append(text + ".")
@@ -407,8 +413,8 @@ VERSION_RE = re.compile(r"^\d+(\.\d+){1,3}$")
 
 
 class Latest:
-    """The latest SFVR release, from the update info the mod's updater reads
-    (the SFVR site's update.json, its "version"). Read every `every` seconds;
+    """The latest Polarity release, from the update info the mod's updater reads
+    (the Polarity site's update.json, its "version"). Read every `every` seconds;
     the last one read is kept while the site does not answer."""
 
     def __init__(self, url, every):
@@ -424,9 +430,9 @@ class Latest:
         self.next = now + self.every
         try:
             _, doc = request("GET", self.url, timeout=15)
-            version = doc.get("version") if isinstance(doc, dict) and doc.get("product") == "SFVR" else None
+            version = doc.get("version") if isinstance(doc, dict) and doc.get("product") in ("Polarity", "SFVR") else None
             if not isinstance(version, str) or not VERSION_RE.match(version):
-                raise ValueError("no SFVR version in it")
+                raise ValueError("no Polarity version in it")
         except (HttpError, ValueError, OSError) as e:
             if not self.said_failing:
                 keep = f"keeping {self.version}" if self.version else "listing every version until it answers"
@@ -436,7 +442,7 @@ class Latest:
                 self.next = now + min(self.every, 60)
             return self.version
         if version != self.version:
-            log(f"rooms-bot: latest SFVR version {version}" + (f" (was {self.version})" if self.version else ""))
+            log(f"rooms-bot: latest Polarity version {version}" + (f" (was {self.version})" if self.version else ""))
         self.version, self.said_failing = version, False
         return self.version
 
@@ -753,16 +759,16 @@ class Bot:
 
 
 def load_settings():
-    # "latest" (the default), "all", or SFVR versions, comma-separated.
+    # "latest" (the default), "all", or Polarity versions, comma-separated.
     versions = [v.strip().lower() for v in (os.environ.get("ROOM_VERSIONS", "") or "latest").split(",") if v.strip()]
     return {
         "poll": env_float("POLL_EVERY", 20, 10),
         "refresh": env_float("REFRESH_EVERY", 20, 10),
         "fail_after": env_float("FAIL_AFTER", 120, 0),
         "max_rooms": int(env_float("MAX_ROOMS", 9, 0)),
-        "heading": os.environ.get("HEADING", "") or "SFVR public rooms",
+        "heading": os.environ.get("HEADING", "") or "Polarity public rooms",
         "versions": versions,
-        "latest_url": (os.environ.get("LATEST_URL", "") or "https://sfvr.pages.dev/update.json").strip(),
+        "latest_url": (os.environ.get("LATEST_URL", "") or "https://polaritymod.link/update.json").strip(),
         "latest_every": env_float("LATEST_EVERY", 300, 60),
         "shown": None,
         "latest": None,
@@ -789,13 +795,13 @@ def read_secret():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Keep a Discord message showing SFVR's public rooms.")
+    parser = argparse.ArgumentParser(description="Keep a Discord message showing Polarity's public rooms.")
     parser.add_argument("--print", action="store_true", help="render the live list to stdout; no Discord")
     parser.add_argument("--once", action="store_true", help="one update, then exit")
     args = parser.parse_args()
 
     settings = load_settings()
-    api_url = os.environ.get("ROOMS_API_URL", "").strip() or "https://sfvr-rooms-api.<account>.workers.dev"
+    api_url = os.environ.get("ROOMS_API_URL", "").strip() or "https://polarity-rooms-api.<account>.workers.dev"
     api = RoomsApi(api_url)
 
     if args.print:

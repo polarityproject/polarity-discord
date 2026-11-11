@@ -1,12 +1,16 @@
 # Changelog
 
-Releases of sfvr-discord, the Discord bot for SFVR's public rooms. Newest
+Releases of polarity-discord, the Discord bot for Polarity's public rooms. Newest
 first; the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
 ### Added
 
+- Polarity's names: the bot reads each room's `client_version` (or
+  `sfvr_version`, from keepers before 0.4.0), takes update info whose
+  product is Polarity or SFVR, and defaults to polaritymod.link and the
+  polarity-rooms-api Worker. Its compose project is `polarity-discord`.
 - The message is edited at every look (`REFRESH_EVERY` 20, was 300), so its
   "last checked" time shows the bot is polling. A `discord.env` that still
   says `REFRESH_EVERY=300` keeps the old pace.
@@ -15,7 +19,7 @@ first; the format follows [Keep a Changelog](https://keepachangelog.com).
   a rooms list not moving for 55 s are logged anyway.
 - Only the latest release's rooms are listed by default (`ROOM_VERSIONS`
   `latest`): the game lists only its own version's rooms, so others could not
-  be found. The latest release is read from the SFVR site's update info every
+  be found. The latest release is read from the Polarity site's update info every
   5 minutes; the heading names it and counts the rooms left out.
 
 - One message in a Discord channel, posted by a webhook and edited in place,
@@ -25,4 +29,4 @@ first; the format follows [Keep a Changelog](https://keepachangelog.com).
 - Stale and unreachable states, and a stopped notice.
 - A "New room opened" notice when a public room opens, deleted after 5 s so
   the channel shows as unread.
-- The Docker image and compose project (`sfvr-discord`), with a health check.
+- The Docker image and compose project (`polarity-discord`), with a health check.
