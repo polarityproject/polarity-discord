@@ -7,6 +7,11 @@ first; the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+- Each room lists its tables, from the rooms API's `table_list` (keepers
+  from 0.4.0): every table's rules, its two seated players with their
+  flags and characters, and whether it is open or playing, with the score.
+  Players not seated are listed after the tables. Rooms from older keepers
+  show as before (table 1's rules).
 - Polarity's names: the bot reads each room's `client_version` (or
   `sfvr_version`, from keepers before 0.4.0), takes update info whose
   product is Polarity or SFVR, and defaults to polaritymod.link and the

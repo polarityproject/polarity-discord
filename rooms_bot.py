@@ -158,6 +158,48 @@ def plural(n, one, many=None):
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
+def seat_label(player):
+    """A seated player: flag, name, character; None (an open seat): italic."""
+    if not isinstance(player, dict) or not player.get("name"):
+        return "*open seat*"
+    parts = []
+    f = flag(player.get("country"))
+    if f:
+        parts.append(f)
+    parts.append(escape(player["name"]))
+    chara = character(player.get("face"))
+    if chara:
+        parts.append(f"({escape(chara)})")
+    return " ".join(parts)
+
+
+TABLE_STATES = {"called": "getting ready", "connecting": "starting", "playing": "playing", "after": "set over"}
+
+
+def table_lines(table, detailed):
+    """One table of the API's table_list: its number and rules, then its two
+    seats with what it is doing (detailed); else both on one line."""
+    if not isinstance(table, dict):
+        return []
+    number = table.get("table") or "?"
+    seats = table.get("seats") if isinstance(table.get("seats"), list) else [None, None]
+    seats = (seats + [None, None])[:2]
+    open_both = not any(isinstance(p, dict) and p.get("name") for p in seats)
+    state = table.get("state")
+    who = "Open" if open_both else f"{seat_label(seats[0])} vs {seat_label(seats[1])}"
+    doing = TABLE_STATES.get(state)
+    if state == "playing":
+        score = table.get("score") if isinstance(table.get("score"), list) else []
+        if len(score) == 2 and all(isinstance(n, int) for n in score):
+            doing = f"playing, {score[0]}–{score[1]}"
+    if doing and not open_both:
+        who += f" · {doing}"
+    if not detailed:
+        return [f"**Table {number}:** {who}"]
+    rules = describe_rules(table.get("rules"))
+    return [f"**Table {number}**" + (f" · {rules}" if rules else ""), who]
+
+
 def room_embed(room, player_cap, show_version=True):
     code = str(room.get("code", ""))
     code_text = f"`{code}`" if CODE_RE.match(code) else escape(code)
@@ -180,14 +222,38 @@ def room_embed(room, player_cap, show_version=True):
         f"**Code {code_text}**" + (f" · Polarity {escape(version)}" if version and show_version else ""),
         f"{members}/{capacity} players · {plural(tables, 'table')} · {seat_text}",
     ]
-    # The API carries the first table's rules only; other tables may differ.
-    rules = describe_rules(room.get("rules"))
-    if rules:
-        lines.append(f"Rules: {rules}" if tables == 1 else f"Table 1 rules: {rules} *(other tables may differ)*")
-
     players = room.get("players") or []
-    if player_cap > 0 and players:
+    table_list = room.get("table_list")
+    if isinstance(table_list, list) and table_list:
+        # Every table with who sits there (keepers from 0.4.0); the players
+        # list then names only those not seated.
         lines.append("")
+        for table in table_list:
+            lines.extend(table_lines(table, player_cap > 0))
+        seated = []
+        for table in table_list:
+            for p in (table.get("seats") or []) if isinstance(table, dict) else []:
+                if isinstance(p, dict) and p.get("name"):
+                    seated.append(p["name"])
+        rest = []
+        for p in players:
+            if p.get("name") in seated:
+                seated.remove(p.get("name"))  # one seat per name (names are not unique)
+            else:
+                rest.append(p)
+        players = rest
+        if players and player_cap > 0:
+            lines.append("")
+            lines.append("**Also in the room**")
+    else:
+        # A keeper before 0.4.0: the first table's rules only.
+        rules = describe_rules(room.get("rules"))
+        if rules:
+            lines.append(f"Rules: {rules}" if tables == 1 else f"Table 1 rules: {rules} *(other tables may differ)*")
+
+    if player_cap > 0 and players:
+        if not (isinstance(table_list, list) and table_list):
+            lines.append("")
         owner_marked = False
         for p in players[:player_cap]:
             name = p.get("name") or "?"

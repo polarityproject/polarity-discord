@@ -113,6 +113,35 @@ class Render(unittest.TestCase):
         self.assertIn("more room", p["embeds"][0]["description"])
         self.assertEqual(p["embeds"][1]["color"], bot.COLOR_FULL)
 
+    def test_table_list(self):
+        # Every table with its rules and seats (keepers from 0.4.0); players
+        # not seated listed after them.
+        tables = [
+            {"table": 1, "rules": "r1 ft2 bo3 t99 ws3", "state": "playing",
+             "seats": [{"name": "POLARITYDEV", "country": "DE", "face": "RYU"},
+                       {"name": "Player 4821", "country": "FR", "face": "KEN"}], "score": [1, 0]},
+            {"table": 2, "rules": "r1 ft3 bo3 t60 rr", "state": "open", "seats": [None, None], "score": [0, 0]},
+            {"table": 3, "rules": "r1 ft2 bo3 t99 ws3", "state": "open",
+             "seats": [{"name": "DECK", "country": None, "face": None}, None], "score": [0, 0]},
+        ]
+        desc = bot.room_embed(room(tables=3, table_list=tables), 16)["description"]
+        self.assertIn("**Table 1** · First to 2 · winner stays, up to 3 · 99 seconds\n"
+                      "🇩🇪 POLARITYDEV (Ryu) vs 🇫🇷 Player 4821 (Ken) · playing, 1–0", desc)
+        self.assertIn("**Table 2** · First to 3 · round robin · 60 seconds\nOpen", desc)
+        self.assertIn("**Table 3** · First to 2 · winner stays, up to 3 · 99 seconds\nDECK vs *open seat*", desc)
+        self.assertNotIn("other tables may differ", desc)
+        # Everyone is seated: no players list after the tables.
+        self.assertNotIn("Also in the room", desc)
+        # Someone not seated is listed after them.
+        extra = room(tables=3, table_list=tables,
+                     players=room()["players"] + [{"name": "Lurker", "country": "JP", "face": "Z21"}])
+        desc = bot.room_embed(extra, 16)["description"]
+        self.assertIn("**Also in the room**\n🇯🇵 Lurker — Akuma", desc)
+        # Squeezed (no players shown): one line a table.
+        tight = bot.room_embed(room(tables=3, table_list=tables), 0)["description"]
+        self.assertIn("**Table 1:** 🇩🇪 POLARITYDEV (Ryu) vs 🇫🇷 Player 4821 (Ken) · playing, 1–0", tight)
+        self.assertIn("**Table 2:** Open", tight)
+
     def test_old_version_field(self):
         # A keeper before 0.4.0 sends sfvr_version only.
         old = room(code="AAAAAA", sfvr_version="0.3.1")
