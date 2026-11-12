@@ -115,7 +115,7 @@ here do.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `ROOMS_API_URL` | the public Worker | the rooms API's address, without a path |
+| `ROOMS_API_URL` | `https://api.polaritymod.link` | the rooms API's address, without a path |
 | `POLL_EVERY` | 20 | seconds between reads (at least 10) |
 | `REFRESH_EVERY` | 20 | the longest without an edit while nothing changes (the "last checked" time; at least 10; at or under `POLL_EVERY`: every look) |
 | `FAIL_AFTER` | 120 | seconds of API failures before the message says it cannot be reached |

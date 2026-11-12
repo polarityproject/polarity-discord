@@ -867,7 +867,7 @@ def main():
     args = parser.parse_args()
 
     settings = load_settings()
-    api_url = os.environ.get("ROOMS_API_URL", "").strip() or "https://polarity-rooms-api.<account>.workers.dev"
+    api_url = os.environ.get("ROOMS_API_URL", "").strip() or "https://api.polaritymod.link"
     api = RoomsApi(api_url)
 
     if args.print:

@@ -15,7 +15,7 @@ first; the format follows [Keep a Changelog](https://keepachangelog.com).
 - Polarity's names: the bot reads each room's `client_version` (or
   `sfvr_version`, from keepers before 0.4.0), takes update info whose
   product is Polarity or SFVR, and defaults to polaritymod.link and the
-  polarity-rooms-api Worker. Its compose project is `polarity-discord`.
+  rooms API at api.polaritymod.link. Its compose project is `polarity-discord`.
 - The message is edited at every look (`REFRESH_EVERY` 20, was 300), so its
   "last checked" time shows the bot is polling. A `discord.env` that still
   says `REFRESH_EVERY=300` keeps the old pace.
