@@ -1,6 +1,7 @@
 # polarity-discord
 
-A Discord bot for Polarity, the Street Fighter V rollback netplay mod: one
+A Discord bot for [Polarity](https://polaritymod.link), unofficial online
+play for Street Fighter V: one
 message in a Discord channel, kept showing the public custom rooms. It reads
 the public rooms API (specified in the `polarity-server` repository,
 `docs/rooms-api.md`) like any other tool, and runs on its own in Docker,
