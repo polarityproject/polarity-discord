@@ -2,3 +2,5 @@
 *.env
 secrets/
 __pycache__/
+# git archive bundles made for copying to the VPS.
+*.tgz
