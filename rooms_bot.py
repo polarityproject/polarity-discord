@@ -176,28 +176,52 @@ def seat_label(player):
 TABLE_STATES = {"called": "getting ready", "connecting": "starting", "playing": "playing", "after": "set over"}
 
 
+def seated(table):
+    """A table's two seats, None where nobody sits."""
+    seats = table.get("seats") if isinstance(table.get("seats"), list) else []
+    return [p if isinstance(p, dict) and p.get("name") else None for p in (seats + [None, None])[:2]]
+
+
 def table_lines(table, detailed):
-    """One table of the API's table_list: its number and rules, then its two
-    seats with what it is doing (detailed); else both on one line."""
-    if not isinstance(table, dict):
-        return []
+    """One table of the API's table_list that someone sits at: its number and
+    rules, then its two seats with what it is doing (detailed); else both on
+    one line."""
     number = table.get("table") or "?"
-    seats = table.get("seats") if isinstance(table.get("seats"), list) else [None, None]
-    seats = (seats + [None, None])[:2]
-    open_both = not any(isinstance(p, dict) and p.get("name") for p in seats)
+    seats = seated(table)
+    who = f"{seat_label(seats[0])} vs {seat_label(seats[1])}"
     state = table.get("state")
-    who = "Open" if open_both else f"{seat_label(seats[0])} vs {seat_label(seats[1])}"
     doing = TABLE_STATES.get(state)
     if state == "playing":
         score = table.get("score") if isinstance(table.get("score"), list) else []
         if len(score) == 2 and all(isinstance(n, int) for n in score):
             doing = f"playing, {score[0]}–{score[1]}"
-    if doing and not open_both:
+    if doing:
         who += f" · {doing}"
     if not detailed:
         return [f"**Table {number}:** {who}"]
     rules = describe_rules(table.get("rules"))
     return [f"**Table {number}**" + (f" · {rules}" if rules else ""), who]
+
+
+def table_section(table_list, players, detailed):
+    """A room's table_list (keepers from 0.4.0) as lines, and the players not
+    seated at any table. The tables nobody sits at are one count after the
+    others, wherever they fall in the numbering, so spare tables do not bury
+    the ones in use."""
+    tables = [t for t in table_list if isinstance(t, dict)]
+    busy = [t for t in tables if any(seated(t))]
+    lines = [line for t in busy for line in table_lines(t, detailed)]
+    if len(tables) > len(busy):
+        lines.append(f"**{plural(len(tables) - len(busy), 'Open Table')}**")
+    # Names are not unique, so each seat takes one matching player off the list.
+    seated_names = [p["name"] for t in busy for p in seated(t) if p]
+    rest = []
+    for p in players:
+        if p.get("name") in seated_names:
+            seated_names.remove(p.get("name"))
+        else:
+            rest.append(p)
+    return lines, rest
 
 
 def room_embed(room, player_cap, show_version=True):
@@ -224,27 +248,12 @@ def room_embed(room, player_cap, show_version=True):
     ]
     players = room.get("players") or []
     table_list = room.get("table_list")
-    if isinstance(table_list, list) and table_list:
-        # Every table with who sits there (keepers from 0.4.0); the players
-        # list then names only those not seated.
-        lines.append("")
-        for table in table_list:
-            lines.extend(table_lines(table, player_cap > 0))
-        seated = []
-        for table in table_list:
-            for p in (table.get("seats") or []) if isinstance(table, dict) else []:
-                if isinstance(p, dict) and p.get("name"):
-                    seated.append(p["name"])
-        rest = []
-        for p in players:
-            if p.get("name") in seated:
-                seated.remove(p.get("name"))  # one seat per name (names are not unique)
-            else:
-                rest.append(p)
-        players = rest
+    has_tables = isinstance(table_list, list) and bool(table_list)
+    if has_tables:
+        table_text, players = table_section(table_list, players, player_cap > 0)
+        lines += [""] + table_text
         if players and player_cap > 0:
-            lines.append("")
-            lines.append("**Also in the room**")
+            lines += ["", "**Also in the room**"]
     else:
         # A keeper before 0.4.0: the first table's rules only.
         rules = describe_rules(room.get("rules"))
@@ -252,7 +261,7 @@ def room_embed(room, player_cap, show_version=True):
             lines.append(f"Rules: {rules}" if tables == 1 else f"Table 1 rules: {rules} *(other tables may differ)*")
 
     if player_cap > 0 and players:
-        if not (isinstance(table_list, list) and table_list):
+        if not has_tables:
             lines.append("")
         owner_marked = False
         for p in players[:player_cap]:

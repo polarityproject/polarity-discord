@@ -9,10 +9,10 @@ on the rooms VPS or anywhere else.
 
 The message: a heading with the players online, the public rooms and the
 players in them, then a card per room (title, code, Polarity version, players,
-tables, open seats, the first table's rules, each member's flag and
-character, the owner marked). When a public room opens it also posts "New
-room opened" and deletes it a few seconds later, so the channel shows as
-unread.
+open seats, the tables in use with their rules and players, a count of open
+tables, each member's flag and character, the owner marked). When a public
+room opens it also posts "New room opened" and deletes it a few seconds
+later, so the channel shows as unread.
 
 ## Layout
 
@@ -53,8 +53,12 @@ unread.
   `ROOM_VERSIONS` changes this.
 - Up to 9 rooms (Discord's 10 embeds less the heading); past that, or past
   6,000 characters, it shows fewer players a room, then "and N more rooms".
-- A room's rules are its first table's (all the API carries): "Rules:" for
-  a one-table room, "Table 1 rules: … (other tables may differ)" otherwise.
+- Each table someone sits at is listed in order, with its rules, its two
+  players and what it is doing ("playing, 1–0"). The tables nobody sits at
+  come after them as one count ("2 Open Tables"), wherever they fall in the
+  numbering. Rooms from keepers before 0.4.0 carry only the first table's
+  rules: "Rules:" for a one-table room, "Table 1 rules: … (other tables may
+  differ)" otherwise.
 - **New room notice**: when a public room opens, it posts "New room opened"
   just after adding the room to the list, and deletes it 5 s later. The
   channel stays marked unread for everyone, with no pile of messages;

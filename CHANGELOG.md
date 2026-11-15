@@ -8,8 +8,9 @@ first; the format follows [Keep a Changelog](https://keepachangelog.com).
 ### Added
 
 - Each room lists its tables, from the rooms API's `table_list` (keepers
-  from 0.4.0): every table's rules, its two seated players with their
-  flags and characters, and whether it is open or playing, with the score.
+  from 0.4.0): each table someone sits at with its rules, its two seated
+  players with their flags and characters, and whether it is playing, with
+  the score. Tables nobody sits at are counted after them ("2 Open Tables").
   Players not seated are listed after the tables. Rooms from older keepers
   show as before (table 1's rules).
 - Polarity's names: the bot reads each room's `client_version` (or

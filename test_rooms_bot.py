@@ -127,8 +127,10 @@ class Render(unittest.TestCase):
         desc = bot.room_embed(room(tables=3, table_list=tables), 16)["description"]
         self.assertIn("**Table 1** · First to 2 · winner stays, up to 3 · 99 seconds\n"
                       "🇩🇪 POLARITYDEV (Ryu) vs 🇫🇷 Player 4821 (Ken) · playing, 1–0", desc)
-        self.assertIn("**Table 2** · First to 3 · round robin · 60 seconds\nOpen", desc)
-        self.assertIn("**Table 3** · First to 2 · winner stays, up to 3 · 99 seconds\nDECK vs *open seat*", desc)
+        # Table 2 (empty) is counted after table 3 (one seat taken).
+        self.assertNotIn("**Table 2**", desc)
+        self.assertIn("**Table 3** · First to 2 · winner stays, up to 3 · 99 seconds\nDECK vs *open seat*\n"
+                      "**1 Open Table**", desc)
         self.assertNotIn("other tables may differ", desc)
         # Everyone is seated: no players list after the tables.
         self.assertNotIn("Also in the room", desc)
@@ -140,7 +142,16 @@ class Render(unittest.TestCase):
         # Squeezed (no players shown): one line a table.
         tight = bot.room_embed(room(tables=3, table_list=tables), 0)["description"]
         self.assertIn("**Table 1:** 🇩🇪 POLARITYDEV (Ryu) vs 🇫🇷 Player 4821 (Ken) · playing, 1–0", tight)
-        self.assertIn("**Table 2:** Open", tight)
+        self.assertIn("**Table 3:** DECK vs *open seat*\n**1 Open Table**", tight)
+        # Several empty tables, one in a gap: one count; all empty: the count alone.
+        gaps = [dict(tables[0]), dict(tables[1]), dict(tables[0], table=3), dict(tables[1], table=4)]
+        desc = bot.room_embed(room(tables=4, table_list=gaps), 16)["description"]
+        self.assertIn("**Table 3**", desc)
+        self.assertIn("**2 Open Tables**", desc)
+        self.assertLess(desc.index("**Table 3**"), desc.index("**2 Open Tables**"))
+        idle = [dict(tables[1], table=n) for n in (1, 2, 3)]
+        desc = bot.room_embed(room(tables=3, table_list=idle, players=[]), 16)["description"]
+        self.assertTrue(desc.endswith("\n\n**3 Open Tables**"), desc)
 
     def test_old_version_field(self):
         # A keeper before 0.4.0 sends sfvr_version only.
