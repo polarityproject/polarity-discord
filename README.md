@@ -192,3 +192,7 @@ python rooms_bot.py --print       # the live list rendered as the message's JSON
 
 `rooms_bot.py --once` does one update and exits (with `DISCORD_WEBHOOK_URL`
 set, or `DISCORD_SECRET_FILE` naming a file with the URL).
+
+ruff 0.17.6 formats and checks the Python, set up in `ruff.toml`.
+`ruff format .` formats it, `ruff format --check .` lists the unformatted
+files, and `ruff check .` reports lint findings.
