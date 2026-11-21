@@ -17,10 +17,18 @@ import rooms_bot as bot
 
 def room(code="4SLJEV", **kw):
     doc = {
-        "code": code, "title": "Karin user looking for M. Bison!", "title_id": 3,
-        "title_characters": ["KRN", "VEG"], "owner": "POLARITYDEV", "client_version": "0.3.0",
-        "members": 3, "capacity": 16, "tables": 2, "open_seats": 2,
-        "rules": "r1 ft2 bo3 t99 ws3", "faces": ["RYU", "KEN"],
+        "code": code,
+        "title": "Karin user looking for M. Bison!",
+        "title_id": 3,
+        "title_characters": ["KRN", "VEG"],
+        "owner": "POLARITYDEV",
+        "client_version": "0.3.0",
+        "members": 3,
+        "capacity": 16,
+        "tables": 2,
+        "open_seats": 2,
+        "rules": "r1 ft2 bo3 t99 ws3",
+        "faces": ["RYU", "KEN"],
         "players": [
             {"name": "POLARITYDEV", "country": "DE", "face": "RYU"},
             {"name": "Player 4821", "country": "FR", "face": "KEN"},
@@ -32,18 +40,29 @@ def room(code="4SLJEV", **kw):
 
 
 def rooms_doc(rooms, stale=False, updated=None):
-    return {"version": 1, "updated": updated or int(time.time() * 1000), "age": 4, "stale": stale,
-            "attribution": "IP Geolocation by DB-IP (https://db-ip.com), CC BY 4.0", "rooms": rooms}
+    return {
+        "version": 1,
+        "updated": updated or int(time.time() * 1000),
+        "age": 4,
+        "stale": stale,
+        "attribution": "IP Geolocation by DB-IP (https://db-ip.com), CC BY 4.0",
+        "rooms": rooms,
+    }
 
 
 def summary_doc(online=12, rooms=()):
-    return {"version": 1, "updated": int(time.time() * 1000), "age": 4, "stale": False,
-            "totals": {"online": online, "in_public_rooms": sum(r["members"] for r in rooms),
-                       "public_rooms": len(rooms)}}
+    return {
+        "version": 1,
+        "updated": int(time.time() * 1000),
+        "age": 4,
+        "stale": False,
+        "totals": {"online": online, "in_public_rooms": sum(r["members"] for r in rooms), "public_rooms": len(rooms)},
+    }
 
 
-SETTINGS = dict(bot.load_settings(), poll=20.0, refresh=300.0, fail_after=0.0, versions=["all"], notify=False,
-                latest_url="")
+SETTINGS = dict(
+    bot.load_settings(), poll=20.0, refresh=300.0, fail_after=0.0, versions=["all"], notify=False, latest_url=""
+)
 NOTIFY = dict(notify=True, notify_text="New room opened", notify_delete=5.0, notify_cooldown=60.0)
 
 
@@ -63,8 +82,10 @@ class Render(unittest.TestCase):
         self.assertEqual(card["title"], "Karin user looking for M. Bison!")
         self.assertIn("**Code `4SLJEV`**", card["description"])
         self.assertIn("**Code `4SLJEV`** · Polarity 0.3.0\n3/16 players · 2 tables", card["description"])
-        self.assertIn("Table 1 rules: First to 2 · winner stays, up to 3 · 99 seconds *(other tables may differ)*",
-                      card["description"])
+        self.assertIn(
+            "Table 1 rules: First to 2 · winner stays, up to 3 · 99 seconds *(other tables may differ)*",
+            card["description"],
+        )
         one = bot.room_embed(room(tables=1), 16)["description"]
         self.assertIn("\nRules: First to 2 · winner stays", one)
         self.assertIn("🇩🇪 **POLARITYDEV** 👑 — Ryu", card["description"])
@@ -74,8 +95,13 @@ class Render(unittest.TestCase):
         self.assertEqual(p["allowed_mentions"], {"parse": []})
 
     def test_null_title_and_no_countries(self):
-        r = room(title=None, title_id=0, title_characters=[], owner="Bob_*",
-                 players=[{"name": "Bob_*", "country": None, "face": None}])
+        r = room(
+            title=None,
+            title_id=0,
+            title_characters=[],
+            owner="Bob_*",
+            players=[{"name": "Bob_*", "country": None, "face": None}],
+        )
         p = bot.render(rooms_doc([r]), summary_doc(1, [r]), "live", SETTINGS, 1)
         self.assertEqual(p["embeds"][1]["title"], "Bob\\_\\*'s room")
 
@@ -105,8 +131,9 @@ class Render(unittest.TestCase):
 
     def test_full_rooms_fit(self):
         players = [{"name": "N" * 32, "country": "US", "face": "Z42"} for _ in range(16)]
-        rooms = [room(code=f"ABCDE{c}", title="T" * 40, members=16, open_seats=0, players=players)
-                 for c in "ABCDEFGHJKLM"]
+        rooms = [
+            room(code=f"ABCDE{c}", title="T" * 40, members=16, open_seats=0, players=players) for c in "ABCDEFGHJKLM"
+        ]
         p = bot.render(rooms_doc(rooms), summary_doc(200, rooms), "live", SETTINGS, 1)
         self.assertLessEqual(len(p["embeds"]), 10)
         self.assertLessEqual(total_chars(p), 6000)
@@ -117,26 +144,45 @@ class Render(unittest.TestCase):
         # Every table with its rules and seats (keepers from 0.4.0); players
         # not seated listed after them.
         tables = [
-            {"table": 1, "rules": "r1 ft2 bo3 t99 ws3", "state": "playing",
-             "seats": [{"name": "POLARITYDEV", "country": "DE", "face": "RYU"},
-                       {"name": "Player 4821", "country": "FR", "face": "KEN"}], "score": [1, 0]},
+            {
+                "table": 1,
+                "rules": "r1 ft2 bo3 t99 ws3",
+                "state": "playing",
+                "seats": [
+                    {"name": "POLARITYDEV", "country": "DE", "face": "RYU"},
+                    {"name": "Player 4821", "country": "FR", "face": "KEN"},
+                ],
+                "score": [1, 0],
+            },
             {"table": 2, "rules": "r1 ft3 bo3 t60 rr", "state": "open", "seats": [None, None], "score": [0, 0]},
-            {"table": 3, "rules": "r1 ft2 bo3 t99 ws3", "state": "open",
-             "seats": [{"name": "DECK", "country": None, "face": None}, None], "score": [0, 0]},
+            {
+                "table": 3,
+                "rules": "r1 ft2 bo3 t99 ws3",
+                "state": "open",
+                "seats": [{"name": "DECK", "country": None, "face": None}, None],
+                "score": [0, 0],
+            },
         ]
         desc = bot.room_embed(room(tables=3, table_list=tables), 16)["description"]
-        self.assertIn("**Table 1** · First to 2 · winner stays, up to 3 · 99 seconds\n"
-                      "🇩🇪 POLARITYDEV (Ryu) vs 🇫🇷 Player 4821 (Ken) · playing, 1–0", desc)
+        self.assertIn(
+            "**Table 1** · First to 2 · winner stays, up to 3 · 99 seconds\n"
+            "🇩🇪 POLARITYDEV (Ryu) vs 🇫🇷 Player 4821 (Ken) · playing, 1–0",
+            desc,
+        )
         # Table 2 (empty) is counted after table 3 (one seat taken).
         self.assertNotIn("**Table 2**", desc)
-        self.assertIn("**Table 3** · First to 2 · winner stays, up to 3 · 99 seconds\nDECK vs *open seat*\n"
-                      "**1 Open Table**", desc)
+        self.assertIn(
+            "**Table 3** · First to 2 · winner stays, up to 3 · 99 seconds\nDECK vs *open seat*\n**1 Open Table**", desc
+        )
         self.assertNotIn("other tables may differ", desc)
         # Everyone is seated: no players list after the tables.
         self.assertNotIn("Also in the room", desc)
         # Someone not seated is listed after them.
-        extra = room(tables=3, table_list=tables,
-                     players=room()["players"] + [{"name": "Lurker", "country": "JP", "face": "Z21"}])
+        extra = room(
+            tables=3,
+            table_list=tables,
+            players=room()["players"] + [{"name": "Lurker", "country": "JP", "face": "Z21"}],
+        )
         desc = bot.room_embed(extra, 16)["description"]
         self.assertIn("**Also in the room**\n🇯🇵 Lurker — Akuma", desc)
         # Squeezed (no players shown): one line a table.
@@ -171,7 +217,9 @@ class Render(unittest.TestCase):
         self.assertEqual(len(p["embeds"]), 2)
         self.assertIn("BBBBBB", p["embeds"][1]["description"])
         self.assertNotIn("Polarity 0.3.1", p["embeds"][1]["description"])  # one version: not on each card
-        self.assertIn("Rooms on Polarity **0.3.1** (1 room on other versions not listed).", p["embeds"][0]["description"])
+        self.assertIn(
+            "Rooms on Polarity **0.3.1** (1 room on other versions not listed).", p["embeds"][0]["description"]
+        )
 
     def test_latest_version(self):
         rooms = [room(code="AAAAAA", client_version="0.3.0"), room(code="BBBBBB", client_version="0.3.0.1")]
@@ -214,6 +262,7 @@ class Render(unittest.TestCase):
 
 class Fake(http.server.BaseHTTPRequestHandler):
     """The rooms API on /v1/..., a webhook on /api/webhooks/1/tok..."""
+
     world = None
 
     def _send(self, code, doc=None):
@@ -285,9 +334,18 @@ class Fake(http.server.BaseHTTPRequestHandler):
 
 class Loop(unittest.TestCase):
     def setUp(self):
-        self.world = {"rooms": rooms_doc([room()]), "summary": summary_doc(5, [room()]), "api_down": False,
-                      "messages": {}, "next_id": 100, "log": [], "limit_once": False, "delete_fails": False,
-                      "update": {"product": "Polarity", "version": "0.3.0.1"}, "update_reads": 0}
+        self.world = {
+            "rooms": rooms_doc([room()]),
+            "summary": summary_doc(5, [room()]),
+            "api_down": False,
+            "messages": {},
+            "next_id": 100,
+            "log": [],
+            "limit_once": False,
+            "delete_fails": False,
+            "update": {"product": "Polarity", "version": "0.3.0.1"},
+            "update_reads": 0,
+        }
         Fake.world = self.world
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -297,8 +355,12 @@ class Loop(unittest.TestCase):
         self.make()
 
     def make(self, **settings):
-        self.bot = bot.Bot(bot.RoomsApi(self.base), bot.Discord(self.base + "/api/webhooks/1/tok"),
-                           bot.State(self.dir), dict(SETTINGS, **settings))
+        self.bot = bot.Bot(
+            bot.RoomsApi(self.base),
+            bot.Discord(self.base + "/api/webhooks/1/tok"),
+            bot.State(self.dir),
+            dict(SETTINGS, **settings),
+        )
 
     def tearDown(self):
         self.server.shutdown()
@@ -386,8 +448,11 @@ class Loop(unittest.TestCase):
     def test_trace_names_each_call_without_the_token(self):
         self.make(trace=True)
         text = self.logged(self.bot.step)
-        self.assertRegex(text, r"look: live, 1 room, posted in [\d.]+ s; list \d+ s old \(age 4\); "
-                               r"GET rooms [\d.]+ s, GET summary [\d.]+ s, POST webhook [\d.]+ s")
+        self.assertRegex(
+            text,
+            r"look: live, 1 room, posted in [\d.]+ s; list \d+ s old \(age 4\); "
+            r"GET rooms [\d.]+ s, GET summary [\d.]+ s, POST webhook [\d.]+ s",
+        )
         text = self.logged(lambda: self.bot.step(late=7.4))
         self.assertIn("look (7 s late): live, 1 room, no change in", text)
         self.assertNotIn("PATCH", text)
@@ -493,8 +558,9 @@ class Loop(unittest.TestCase):
         self.assertIn("not updating", self.last()["embeds"][0]["description"])
 
     def test_latest_from_update_info(self):
-        self.world["rooms"] = rooms_doc([room(code="AAAAAA", client_version="0.3.0"),
-                                         room(code="BBBBBB", client_version="0.3.0.1")])
+        self.world["rooms"] = rooms_doc(
+            [room(code="AAAAAA", client_version="0.3.0"), room(code="BBBBBB", client_version="0.3.0.1")]
+        )
         self.make(versions=["latest"], latest_url=self.base + "/update.json", latest_every=300.0, **NOTIFY)
         self.bot.step()
         self.assertEqual(len(self.last()["embeds"]), 2)
@@ -504,8 +570,9 @@ class Loop(unittest.TestCase):
         # A release: 0.3.1 is the latest; its rooms are listed (and announced as new).
         # The old site's update info (product SFVR) is read too.
         self.world["update"] = {"product": "SFVR", "version": "0.3.1"}
-        self.world["rooms"] = rooms_doc([room(code="BBBBBB", client_version="0.3.0.1"),
-                                         room(code="CCCCCC", client_version="0.3.1")])
+        self.world["rooms"] = rooms_doc(
+            [room(code="BBBBBB", client_version="0.3.0.1"), room(code="CCCCCC", client_version="0.3.1")]
+        )
         self.bot.latest.next = 0
         self.bot.step()
         self.assertEqual(len(self.last()["embeds"]), 2)
@@ -519,8 +586,9 @@ class Loop(unittest.TestCase):
 
     def test_latest_unknown_lists_everything(self):
         self.world["update"] = {"product": "other", "version": "9.9"}
-        self.world["rooms"] = rooms_doc([room(code="AAAAAA", client_version="0.3.0"),
-                                         room(code="BBBBBB", client_version="0.3.0.1")])
+        self.world["rooms"] = rooms_doc(
+            [room(code="AAAAAA", client_version="0.3.0"), room(code="BBBBBB", client_version="0.3.0.1")]
+        )
         self.make(versions=["latest"], latest_url=self.base + "/update.json", latest_every=300.0)
         self.bot.step()
         self.assertEqual(len(self.last()["embeds"]), 3)
@@ -532,8 +600,12 @@ class Loop(unittest.TestCase):
         self.assertIn("not updating", self.last()["embeds"][0]["description"])
 
     def test_bad_webhook_is_logged_not_fatal(self):
-        self.bot = bot.Bot(bot.RoomsApi(self.base), bot.Discord(self.base + "/api/webhooks/1/wrong"),
-                           bot.State(self.dir), dict(SETTINGS))
+        self.bot = bot.Bot(
+            bot.RoomsApi(self.base),
+            bot.Discord(self.base + "/api/webhooks/1/wrong"),
+            bot.State(self.dir),
+            dict(SETTINGS),
+        )
         self.bot.step()
         self.assertTrue(self.bot.discord_failing)
         self.assertIsNone(self.bot.message_id)

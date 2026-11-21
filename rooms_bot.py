@@ -52,24 +52,60 @@ MAX_TOTAL = 6000
 MAX_DESC = 4096
 MAX_TITLE = 256
 
-COLOR_LIVE = 0x3BA55C      # header when live; a room with open seats
+COLOR_LIVE = 0x3BA55C  # header when live; a room with open seats
 COLOR_JOINABLE = 0xFAA61A  # seats taken, room to join (queue or watch)
-COLOR_FULL = 0x747F8D      # room full; anything not live
-COLOR_DOWN = 0xED4245      # header when the list is stale or unreachable
+COLOR_FULL = 0x747F8D  # room full; anything not live
+COLOR_DOWN = 0xED4245  # header when the list is stale or unreachable
 
 CODE_RE = re.compile(r"^[A-HJ-NP-Z2-9]{6}$")
 
 # docs/rooms-api.md, "Character codes".
 CHARACTERS = {
-    "RYU": "Ryu", "KEN": "Ken", "DSM": "Dhalsim", "JRI": "Juri", "RSD": "Rashid",
-    "NCL": "Necalli", "IBK": "Ibuki", "ALX": "Alex", "Z22": "Ed", "Z25": "Zeku",
-    "Z28": "Falke", "Z31": "Sagat", "Z34": "E. Honda", "Z37": "Seth", "Z40": "Oro",
-    "VEG": "M. Bison", "NSH": "Nash", "BRD": "Birdie", "FAN": "F.A.N.G", "CMY": "Cammy",
-    "BSN": "Balrog", "Z21": "Akuma", "Z23": "Menat", "Z26": "Sakura", "Z29": "Cody",
-    "Z32": "Kage", "Z35": "Lucia", "Z38": "Dan", "Z41": "Akira", "ELV": "Eleven",
-    "CNL": "Chun-Li", "KRN": "Karin", "ZGF": "Zangief", "BLR": "Vega", "RMK": "R. Mika",
-    "LAR": "Laura", "GUL": "Guile", "URN": "Urien", "Z20": "Kolin", "Z24": "Abigail",
-    "Z27": "Blanka", "Z30": "G", "Z33": "Poison", "Z36": "Gill", "Z39": "Rose",
+    "RYU": "Ryu",
+    "KEN": "Ken",
+    "DSM": "Dhalsim",
+    "JRI": "Juri",
+    "RSD": "Rashid",
+    "NCL": "Necalli",
+    "IBK": "Ibuki",
+    "ALX": "Alex",
+    "Z22": "Ed",
+    "Z25": "Zeku",
+    "Z28": "Falke",
+    "Z31": "Sagat",
+    "Z34": "E. Honda",
+    "Z37": "Seth",
+    "Z40": "Oro",
+    "VEG": "M. Bison",
+    "NSH": "Nash",
+    "BRD": "Birdie",
+    "FAN": "F.A.N.G",
+    "CMY": "Cammy",
+    "BSN": "Balrog",
+    "Z21": "Akuma",
+    "Z23": "Menat",
+    "Z26": "Sakura",
+    "Z29": "Cody",
+    "Z32": "Kage",
+    "Z35": "Lucia",
+    "Z38": "Dan",
+    "Z41": "Akira",
+    "ELV": "Eleven",
+    "CNL": "Chun-Li",
+    "KRN": "Karin",
+    "ZGF": "Zangief",
+    "BLR": "Vega",
+    "RMK": "R. Mika",
+    "LAR": "Laura",
+    "GUL": "Guile",
+    "URN": "Urien",
+    "Z20": "Kolin",
+    "Z24": "Abigail",
+    "Z27": "Blanka",
+    "Z30": "G",
+    "Z33": "Poison",
+    "Z36": "Gill",
+    "Z39": "Rose",
     "Z42": "Luke",
 }
 
@@ -104,6 +140,7 @@ def env_float(name, default, low):
 
 
 # ---------------------------------------------------------------- rendering
+
 
 def escape(text):
     """Player-chosen text as plain text in Discord markdown."""
@@ -372,15 +409,16 @@ def render(rooms_doc, summary_doc, state, settings, checked):
         if rooms:
             lines.append("Join in the game: **Custom Rooms → Join with a code**.")
         else:
-            lines.append("No public rooms open right now. Make one in the game: "
-                         "**Custom Rooms → Create a room**, Visibility **Public**.")
+            lines.append(
+                "No public rooms open right now. Make one in the game: "
+                "**Custom Rooms → Create a room**, Visibility **Public**."
+            )
     else:
         header["color"] = COLOR_DOWN
         rooms = []
         if state == "stale":
             since = f" since <t:{updated}:R>" if updated else ""
-            lines.append(f"🔴 The rooms server has not reported{since}. "
-                         "Rooms will show here again when it is back.")
+            lines.append(f"🔴 The rooms server has not reported{since}. Rooms will show here again when it is back.")
         elif state == "unreachable":
             lines.append(f"⚠️ The rooms list cannot be reached since <t:{settings['failing_since']}:R>.")
         else:
@@ -396,6 +434,7 @@ def render(rooms_doc, summary_doc, state, settings, checked):
     limit = min(settings["max_rooms"], MAX_EMBEDS - 1)
     picked = rooms[:limit]
     more = len(rooms) - len(picked)
+
     # (with room for the "and N more" line).
     def fits(embeds):
         return embed_size(header) + sum(embed_size(e) for e in embeds) <= MAX_TOTAL - 100
@@ -422,6 +461,7 @@ def strip_checked(payload):
 
 
 # ---------------------------------------------------------------- HTTP
+
 
 class HttpError(Exception):
     def __init__(self, status, body, retry_after=None):
@@ -505,7 +545,9 @@ class Latest:
         self.next = now + self.every
         try:
             _, doc = request("GET", self.url, timeout=15)
-            version = doc.get("version") if isinstance(doc, dict) and doc.get("product") in ("Polarity", "SFVR") else None
+            version = (
+                doc.get("version") if isinstance(doc, dict) and doc.get("product") in ("Polarity", "SFVR") else None
+            )
             if not isinstance(version, str) or not VERSION_RE.match(version):
                 raise ValueError("no Polarity version in it")
         except (HttpError, ValueError, OSError) as e:
@@ -529,7 +571,9 @@ class Discord:
         parsed = urllib.parse.urlsplit(url.strip())
         parts = parsed.path.rstrip("/").split("/")
         if parsed.scheme not in ("http", "https") or len(parts) < 3 or parts[-3] != "webhooks":
-            raise SystemExit("rooms-bot: the secret is not a webhook URL (https://discord.com/api/webhooks/<id>/<token>)")
+            raise SystemExit(
+                "rooms-bot: the secret is not a webhook URL (https://discord.com/api/webhooks/<id>/<token>)"
+            )
         self.base = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
         self.thread = (urllib.parse.parse_qs(parsed.query).get("thread_id") or [None])[0]
         # Which webhook the saved message belongs to (its id, never the token).
@@ -567,6 +611,7 @@ class Discord:
 
 # ---------------------------------------------------------------- state
 
+
 class State:
     def __init__(self, folder):
         self.path = os.path.join(folder, "state.json") if folder else None
@@ -602,6 +647,7 @@ class State:
 
 # ---------------------------------------------------------------- loop
 
+
 class Stop(Exception):
     pass
 
@@ -621,8 +667,11 @@ class Bot:
         self.message_id = settings["message_id"] or (saved.get("message_id") if same else None)
         # New-room notices still to delete: [{"id", "due", "tries"}]. Ones left
         # from before a restart go at the first sweep.
-        self.notices = [{"id": str(n["id"]), "due": 0, "tries": 0}
-                        for n in (saved.get("notices") or []) if same and isinstance(n, dict) and n.get("id")]
+        self.notices = [
+            {"id": str(n["id"]), "due": 0, "tries": 0}
+            for n in (saved.get("notices") or [])
+            if same and isinstance(n, dict) and n.get("id")
+        ]
         self.known = None  # the listed rooms' codes at the last look; None: no baseline yet
         self.last_notice = 0.0
         self.latest = Latest(settings["latest_url"], settings["latest_every"])
@@ -649,11 +698,15 @@ class Bot:
             return
         if lag > BEHIND and self.behind_since is None:
             self.behind_since = time.time() - lag
-            log(f"rooms-bot: the rooms list is {lag:.0f} s old (age {self.rooms_doc.get('age')}): "
-                "the rooms server's keeper or publisher is behind")
+            log(
+                f"rooms-bot: the rooms list is {lag:.0f} s old (age {self.rooms_doc.get('age')}): "
+                "the rooms server's keeper or publisher is behind"
+            )
         elif lag <= BEHIND and self.behind_since is not None:
-            log(f"rooms-bot: the rooms list is fresh again ({lag:.0f} s old; "
-                f"it had not moved for {time.time() - lag - self.behind_since:.0f} s)")
+            log(
+                f"rooms-bot: the rooms list is fresh again ({lag:.0f} s old; "
+                f"it had not moved for {time.time() - lag - self.behind_since:.0f} s)"
+            )
             self.behind_since = None
 
     def fetch(self):
@@ -706,8 +759,13 @@ class Bot:
 
     def save(self):
         try:
-            self.state.save({"target": self.discord.target, "message_id": self.message_id,
-                             "notices": [{"id": n["id"]} for n in self.notices]})
+            self.state.save(
+                {
+                    "target": self.discord.target,
+                    "message_id": self.message_id,
+                    "notices": [{"id": n["id"]} for n in self.notices],
+                }
+            )
         except OSError as e:
             log(f"rooms-bot: cannot save the state ({e})")
 
@@ -772,8 +830,9 @@ class Bot:
         lag = self.list_age()
         if lag is not None:
             line += f"; list {lag:.0f} s old (age {self.rooms_doc.get('age')})"
-        calls = ", ".join(f"{label} {secs:.2f} s" + ("" if out.startswith("2") else f" ({out})")
-                          for label, secs, out in CALLS)
+        calls = ", ".join(
+            f"{label} {secs:.2f} s" + ("" if out.startswith("2") else f" ({out})") for label, secs, out in CALLS
+        )
         log(line + (f"; {calls}" if calls else ""))
 
     def _step(self, force):
@@ -894,9 +953,11 @@ def main():
         raise SystemExit("rooms-bot: no Discord webhook URL (DISCORD_SECRET_FILE)")
     discord = Discord(secret)
     bot = Bot(api, discord, State(os.environ.get("STATE_DIR", "/data")), settings)
-    log(f"rooms-bot: {api_url} -> Discord webhook, every {settings['poll']:g} s"
+    log(
+        f"rooms-bot: {api_url} -> Discord webhook, every {settings['poll']:g} s"
         + (f", message {bot.message_id}" if bot.message_id else ", new message")
-        + (", tracing every look" if settings["trace"] else ""))
+        + (", tracing every look" if settings["trace"] else "")
+    )
 
     if args.once:
         bot.sweep(time.time(), everything=True)
