@@ -83,13 +83,13 @@ Webhook URL**. Anyone with that URL can post there: keep it like a password.
 Best in a channel where only the webhook posts (a read-only "rooms"
 channel). For a forum post or thread, add `?thread_id=<its id>` to the URL.
 
-On your PC, pack the repository (committed files only, so a local
-`discord.env` or `secrets/` stays behind) and copy it over:
+On your PC, in the folder that holds the polarity-discord checkout, pack the
+repository (committed files only, so a local `discord.env` or `secrets/`
+stays behind) and copy it over:
 
 ```powershell
-cd D:\SteamLibrary\steamapps\common\StreetFighterV
-git -C polarity-discord archive --format=tar.gz -o ..\polarity-discord.tgz main
-scp ..\polarity-discord.tgz polarityadmin@<vps>:~
+git -C polarity-discord archive --format=tar.gz -o polarity-discord.tgz main
+scp polarity-discord.tgz polarityadmin@<vps>:~
 ```
 
 On the VPS (Docker as in polarity-server's `docs/rooms-vps-docker.md`):
